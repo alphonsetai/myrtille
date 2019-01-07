@@ -17,3 +17,4 @@
 --%>
 
 <%@ Page Language="C#" Inherits="Myrtille.Web.GetCursor" Codebehind="GetCursor.aspx.cs" AutoEventWireup="true" Culture="auto" UICulture="auto" %>
+<%@ OutputCache Location="None" %>

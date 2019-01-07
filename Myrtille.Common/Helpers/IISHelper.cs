@@ -111,11 +111,13 @@ namespace Myrtille.Helpers
         /// <param name="version"></param>
         /// <param name="enable32BitAppOnWin64"></param>
         /// <param name="loadUserProfile">true for IIS > 6</param>
+        /// <param name="allowRecycling">enabled by default on IIS, this operation is destructive (creates a new IIS worker process); among other things, all http sessions are lost!</param>
         public static void CreateIISApplicationPool(
             string poolName,
             string version,
             bool enable32BitAppOnWin64 = false,
-            bool loadUserProfile = true)
+            bool loadUserProfile = true,
+            bool allowRecycling = false)
         {
             Trace.TraceInformation("Creating IIS application pool {0}, .NET framework {1}", poolName, version);
 
@@ -129,6 +131,8 @@ namespace Myrtille.Helpers
                 pool.ManagedRuntimeVersion = version;
                 pool.Enable32BitAppOnWin64 = enable32BitAppOnWin64;
                 pool.ProcessModel.LoadUserProfile = loadUserProfile;
+                pool.ProcessModel.IdleTimeout = allowRecycling ? new TimeSpan(0, 20, 0) : new TimeSpan(0);
+                pool.Recycling.PeriodicRestart.Time = allowRecycling ? new TimeSpan(0, 1740, 0) : new TimeSpan(0);
                 serverManager.CommitChanges();
             }
             catch (Exception exc)

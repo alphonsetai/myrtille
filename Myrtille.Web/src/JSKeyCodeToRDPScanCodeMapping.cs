@@ -26,7 +26,7 @@ namespace Myrtille.Web
 
         static JsKeyCodeToRdpScanCodeMapping()
         {
-            // this mapping may not be complete; fill it as needed
+            // this mapping is not complete (latin characters only); fill it as needed
             // keys (javascript keycodes) and values (rdp scancodes) are decimals (scancodes are often expressed in hexadecimal). scancode "0" means there is no available translation (at least for now)
             // see http://protocolsofmatrix.blogspot.com/2007/09/javascript-keycode-reference-table-for.html or http://www.webonweboff.com/tips/js/event_key_codes.aspx for js keycodes
             // see http://www.vmware.com/support/ws55/doc/ws_devices_keymap_vscan.html or http://svn.zentific.com/deprecated/rdp/xrdp/rdp-scan-codes.txt for rdp scancodes

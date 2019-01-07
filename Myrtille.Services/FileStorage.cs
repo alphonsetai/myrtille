@@ -28,7 +28,7 @@ namespace Myrtille.Services
     public class FileStorage : IFileStorage
     {
         public List<string> GetUserDocumentsFolderFiles(
-            int remoteSessionId,
+            Guid remoteSessionId,
             string userDomain,
             string userName,
             string userPassword)
@@ -87,7 +87,7 @@ namespace Myrtille.Services
         }
 
         public Stream DownloadFileFromUserDocumentsFolder(
-            int remoteSessionId,
+            Guid remoteSessionId,
             string userDomain,
             string userName,
             string userPassword,

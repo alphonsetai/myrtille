@@ -20,11 +20,11 @@ using System;
 using System.Collections;
 using System.ComponentModel;
 using System.Configuration.Install;
-using System.Diagnostics;
 using System.IO;
 using System.Security.AccessControl;
 using System.Security.Cryptography.X509Certificates;
 using System.Windows.Forms;
+using System.Xml;
 using Myrtille.Helpers;
 
 namespace Myrtille.Web
@@ -42,7 +42,7 @@ namespace Myrtille.Web
             // problem is, it won't uninstall it first... which is not fine because some components can't be installed twice!
             // thus, prior to any install, try to uninstall first
 
-            Trace.TraceInformation("Myrtille.Web is being installed, cleaning first");
+            Context.LogMessage("Myrtille.Web is being installed, cleaning first");
 
             try
             {
@@ -50,12 +50,12 @@ namespace Myrtille.Web
             }
             catch (Exception exc)
             {
-                Trace.TraceInformation("Failed to clean Myrtille.Web ({0})", exc);
+               Context.LogMessage(string.Format("Failed to clean Myrtille.Web ({0})", exc));
             }
 
-            base.Install(stateSaver);
+            Context.LogMessage("Installing Myrtille.Web");
 
-            Trace.TraceInformation("Installing Myrtille.Web");
+            base.Install(stateSaver);
 
             try
             {
@@ -70,11 +70,49 @@ namespace Myrtille.Web
                     IISHelper.CreateIISApplication("/Myrtille", Path.GetFullPath(Context.Parameters["targetdir"]), "MyrtilleAppPool");
                 }
 
-                // create a self signed certificate
-                var cert = CertificateHelper.CreateSelfSignedCertificate(Environment.MachineName, "Myrtille self-signed certificate");
+                // load config
+                var config = new XmlDocument();
+                var configPath = Path.Combine(Path.GetFullPath(Context.Parameters["targetdir"]), "Web.config");
+                config.Load(configPath);
 
-                // bind it to the default website
-                IISHelper.BindCertificate(cert);
+                var navigator = config.CreateNavigator();
+
+                // services port
+                int servicesPort = 8080;
+                if (!string.IsNullOrEmpty(Context.Parameters["SERVICESPORT"]))
+                {
+                    int.TryParse(Context.Parameters["SERVICESPORT"], out servicesPort);
+                }
+
+                if (servicesPort != 8080)
+                {
+                    // client endpoints
+                    var client = XmlTools.GetNode(navigator, "/configuration/system.serviceModel/client");
+                    if (client != null)
+                    {
+                        client.InnerXml = client.InnerXml.Replace("8080", servicesPort.ToString());
+                    }
+                }
+
+                // ssl certificate
+                if (!string.IsNullOrEmpty(Context.Parameters["SSLCERT"]))
+                {
+                    // create a self signed certificate
+                    var cert = CertificateHelper.CreateSelfSignedCertificate(Environment.MachineName, "Myrtille self-signed certificate");
+
+                    // bind it to the default website
+                    IISHelper.BindCertificate(cert);
+                }
+
+                // pdf printer
+                var appSettings = XmlTools.GetNode(navigator, "/configuration/appSettings");
+                if (appSettings != null)
+                {
+                    XmlTools.WriteConfigKey(appSettings, "AllowPrintDownload", (!string.IsNullOrEmpty(Context.Parameters["PDFPRINTER"])).ToString().ToLower());
+                }
+
+                // save config
+                config.Save(configPath);
 
                 // add write permission to the targetdir "log" folder for MyrtilleAppPool, so that Myrtille.Web can save logs into it
                 PermissionsHelper.AddDirectorySecurity(
@@ -85,12 +123,11 @@ namespace Myrtille.Web
                     PropagationFlags.None,
                     AccessControlType.Allow);
 
-                Trace.TraceInformation("Installed Myrtille.Web");
+                Context.LogMessage("Installed Myrtille.Web");
             }
             catch (Exception exc)
             {
-                Context.LogMessage(exc.InnerException != null ? exc.InnerException.Message: exc.Message);
-                Trace.TraceError("Failed to install Myrtille.Web ({0})", exc);
+                Context.LogMessage(string.Format("Failed to install Myrtille.Web ({0})", exc));
                 throw;
             }
         }
@@ -121,7 +158,7 @@ namespace Myrtille.Web
             // enable the line below to debug this installer; disable otherwise
             //MessageBox.Show("Attach the .NET debugger to the 'MSI Debug' msiexec.exe process now for debug. Click OK when ready...", "MSI Debug");
 
-            Trace.TraceInformation("Uninstalling Myrtille.Web");
+            Context.LogMessage("Uninstalling Myrtille.Web");
 
             try
             {
@@ -136,7 +173,7 @@ namespace Myrtille.Web
                     IISHelper.DeleteIISApplicationPool("MyrtilleAppPool");
                 }
 
-                // retrieve the myrtille self signed certificate
+                // retrieve the myrtille self signed certificate, if exists
                 var store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
                 store.Open(OpenFlags.ReadWrite);
                 var certs = store.Certificates.Find(X509FindType.FindByIssuerName, Environment.MachineName, false);
@@ -160,12 +197,11 @@ namespace Myrtille.Web
 
                 store.Close();
 
-                Trace.TraceInformation("Uninstalled Myrtille.Web");
+                Context.LogMessage("Uninstalled Myrtille.Web");
             }
             catch (Exception exc)
             {
-                Context.LogMessage(exc.InnerException != null ? exc.InnerException.Message : exc.Message);
-                Trace.TraceError("Failed to uninstall Myrtille.Web ({0})", exc);
+                Context.LogMessage(string.Format("Failed to uninstall Myrtille.Web ({0})", exc));
                 throw;
             }
         }

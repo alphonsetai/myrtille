@@ -27,7 +27,7 @@ namespace Myrtille.Web
 {
     public class FileStorageClient : ClientBase<IFileStorage>, IFileStorage
     {
-        public List<string> GetUserDocumentsFolderFiles(int remoteSessionId, string userDomain, string userName, string userPassword)
+        public List<string> GetUserDocumentsFolderFiles(Guid remoteSessionId, string userDomain, string userName, string userPassword)
         {
             try
             {
@@ -53,7 +53,7 @@ namespace Myrtille.Web
             }
         }
 
-        public Stream DownloadFileFromUserDocumentsFolder(int remoteSessionId, string userDomain, string userName, string userPassword, string fileName)
+        public Stream DownloadFileFromUserDocumentsFolder(Guid remoteSessionId, string userDomain, string userName, string userPassword, string fileName)
         {
             try
             {

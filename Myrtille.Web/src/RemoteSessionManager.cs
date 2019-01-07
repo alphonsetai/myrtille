@@ -17,14 +17,19 @@
 */
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Diagnostics;
 using System.ServiceModel;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Web;
 using System.Web.Caching;
+using System.Web.SessionState;
 using Myrtille.Helpers;
+using Myrtille.Services.Contracts;
 
 namespace Myrtille.Web
 {
@@ -43,7 +48,7 @@ namespace Myrtille.Web
                 // remote session process client and callback
                 var callback = new RemoteSessionProcessClientCallback(this);
                 var callbackContext = new InstanceContext(callback);
-                Client = new RemoteSessionProcessClient(this, callbackContext);
+                HostClient = new RemoteSessionProcessClient(this, callbackContext);
 
                 // pipes
                 Pipes = new RemoteSessionPipes(RemoteSession);
@@ -53,13 +58,24 @@ namespace Myrtille.Web
                 WebSockets = new List<RemoteSessionSocketHandler>();
 
                 // messages
-                _messageEventLock = new object();
+                MessageQueues = new Hashtable();
 
-                // images
+                // images event
                 _imageEventLock = new object();
 
-                // cache
+                // images cache
                 _imageCache = (Cache)HttpContext.Current.Application[HttpApplicationStateVariables.Cache.ToString()];
+
+                // browser timeout
+                if (!int.TryParse(ConfigurationManager.AppSettings["ClientIdleTimeout"], out _clientIdleTimeoutDelay))
+                {
+                    _clientIdleTimeoutDelay = 0;
+                }
+
+                if (_clientIdleTimeoutDelay > 0)
+                {
+                    ClientIdleTimeout = new CancellationTokenSource();
+                }
             }
             catch (Exception exc)
             {
@@ -69,9 +85,9 @@ namespace Myrtille.Web
 
         #endregion
 
-        #region Client
+        #region Host Client
 
-        public RemoteSessionProcessClient Client { get; private set; }
+        public RemoteSessionProcessClient HostClient { get; private set; }
 
         #endregion
 
@@ -89,7 +105,10 @@ namespace Myrtille.Web
                 // > tag is used to identify an image (0: image; other: message)
                 // > info contains the image metadata (idx, posX, posY, etc.)
                 // > data is the image raw data
-                if (BitConverter.ToInt32(msg, 0) != 0)
+
+                var imgTag = BitConverter.ToInt32(msg, 0);
+
+                if (imgTag != 0)
                 {
                     message = Encoding.UTF8.GetString(msg);
                 }
@@ -100,37 +119,31 @@ namespace Myrtille.Web
                     // request page reload
                     if (message.Equals("reload"))
                     {
-                        if (WebSockets.Count > 0)
-                        {
-                            Trace.TraceInformation("Sending reload request on websocket(s), remote session {0}", RemoteSession.Id);
-                            foreach (var webSocket in WebSockets)
-                            {
-                                webSocket.Send(message);
-                            }
-                        }
-                        else
-                        {
-                            ReloadPage = true;
-                            StopWaitForImageEvent();
-                        }
+                        Trace.TraceInformation("Sending reload request, remote session {0}", RemoteSession.Id);
+                        SendMessage(new RemoteSessionMessage { Type = MessageType.PageReload, Prefix = "reload" });
                     }
-                    // remote clipboard is available
+                    // remote clipboard
                     else if (message.StartsWith("clipboard|"))
                     {
-                        if (WebSockets.Count > 0)
+                        Trace.TraceInformation("Sending clipboard content {0}, remote session {1}", message, RemoteSession.Id);
+                        SendMessage(new RemoteSessionMessage { Type = MessageType.RemoteClipboard, Prefix = "clipboard|", Text = message.Remove(0, 10) });
+                    }
+                    // SSH Terminal data
+                    else if (message.StartsWith("term|"))
+                    {
+                        if (RemoteSession.State == RemoteSessionState.Connecting)
                         {
-                            Trace.TraceInformation("Sending clipboard content {0} on websocket(s), remote session {1}", message, RemoteSession.Id);
-                            foreach (var webSocket in WebSockets)
-                            {
-                                webSocket.Send(message);
-                            }
+                            RemoteSession.State = RemoteSessionState.Connected;
                         }
-                        else
-                        {
-                            ClipboardText = message.Remove(0, 10);
-                            ClipboardAvailable = true;
-                            StopWaitForImageEvent();
-                        }
+
+                        Trace.TraceInformation("Sending terminal content {0}, remote session {1}", message, RemoteSession.Id);
+                        SendMessage(new RemoteSessionMessage { Type = MessageType.TerminalOutput, Prefix = "term|", Text = message.Remove(0, 5) });
+                    }
+                    // print job
+                    else if (message.StartsWith("printjob|"))
+                    {
+                        Trace.TraceInformation("Sending print job {0}, remote session {1}", message, RemoteSession.Id);
+                        SendMessage(new RemoteSessionMessage { Type = MessageType.PrintJob, Prefix = "printjob|", Text = message.Remove(0, 9) });
                     }
                 }
                 // image
@@ -138,7 +151,6 @@ namespace Myrtille.Web
                 {
                     if (RemoteSession.State == RemoteSessionState.Connecting)
                     {
-                        // remote session is now connected
                         RemoteSession.State = RemoteSessionState.Connected;
                     }
 
@@ -163,21 +175,26 @@ namespace Myrtille.Web
 
         public void SendCommand(RemoteSessionCommand command, string args = "")
         {
-            if (RemoteSession.State == RemoteSessionState.NotConnected || RemoteSession.State == RemoteSessionState.Disconnected)
+            if (RemoteSession.State == RemoteSessionState.NotConnected ||
+                RemoteSession.State == RemoteSessionState.Disconnected)
                 return;
 
             var commandWithArgs = string.Concat((string)RemoteSessionCommandMapping.ToPrefix[command], args);
 
             switch (command)
             {
-                // as the process command line can be displayed into the task manager / process explorer, the connection settings (including user credentials) are now passed to the rdp client through the inputs pipe
+                // as the process command line can be displayed into the task manager / process explorer, the connection settings (including user credentials) are now passed to the host client through the inputs pipe
                 // their values are set from the login page (using http(s) post), they shouldn't be modified at this step
                 case RemoteSessionCommand.SendServerAddress:
+                case RemoteSessionCommand.SendVMGuid:
                 case RemoteSessionCommand.SendUserDomain:
                 case RemoteSessionCommand.SendUserName:
                 case RemoteSessionCommand.SendUserPassword:
                 case RemoteSessionCommand.SendStartProgram:
-                    // if needed
+
+                    if (RemoteSession.State != RemoteSessionState.Connecting)
+                        return;
+
                     break;
 
                 // browser, keyboard, mouse, etc.
@@ -189,10 +206,17 @@ namespace Myrtille.Web
                 case RemoteSessionCommand.SendMouseRightButton:
                 case RemoteSessionCommand.SendMouseWheelUp:
                 case RemoteSessionCommand.SendMouseWheelDown:
-                    // if needed
+
+                    if (RemoteSession.State != RemoteSessionState.Connected)
+                        return;
+
                     break;
 
                 case RemoteSessionCommand.SendKeyScancode:
+
+                    if (RemoteSession.State != RemoteSessionState.Connected)
+                        return;
+
                     var keyCodeAndState = args.Split(new[] { "-" }, StringSplitOptions.None);
 
                     var jsKeyCode = int.Parse(keyCodeAndState[0]);
@@ -207,54 +231,101 @@ namespace Myrtille.Web
 
                 // control
                 case RemoteSessionCommand.SetStatMode:
+
+                    if (RemoteSession.State != RemoteSessionState.Connected)
+                        return;
+
                     Trace.TraceInformation("Stat mode {0}, remote session {1}", args == "1" ? "ON" : "OFF", RemoteSession.Id);
                     RemoteSession.StatMode = args == "1";
                     break;
 
                 case RemoteSessionCommand.SetDebugMode:
+
+                    if (RemoteSession.State != RemoteSessionState.Connected)
+                        return;
+
                     Trace.TraceInformation("Debug mode {0}, remote session {1}", args == "1" ? "ON" : "OFF", RemoteSession.Id);
                     RemoteSession.DebugMode = args == "1";
                     break;
 
                 case RemoteSessionCommand.SetCompatibilityMode:
+
+                    if (RemoteSession.State != RemoteSessionState.Connected)
+                        return;
+
                     Trace.TraceInformation("Compatibility mode {0}, remote session {1}", args == "1" ? "ON" : "OFF", RemoteSession.Id);
                     RemoteSession.CompatibilityMode = args == "1";
                     break;
 
                 case RemoteSessionCommand.SetScaleDisplay:
+
+                    if (RemoteSession.State != RemoteSessionState.Connected)
+                        return;
+
                     Trace.TraceInformation("Display scaling {0}, remote session {1}", args != "0" ? args : "OFF", RemoteSession.Id);
                     RemoteSession.ScaleDisplay = args != "0";
                     break;
 
                 case RemoteSessionCommand.SetImageEncoding:
+
+                    if (RemoteSession.State != RemoteSessionState.Connecting &&
+                        RemoteSession.State != RemoteSessionState.Connected)
+                        return;
+
                     Trace.TraceInformation("Image encoding {0}, remote session {1}", int.Parse(args), RemoteSession.Id);
                     RemoteSession.ImageEncoding = (ImageEncoding)int.Parse(args);
                     break;
 
                 case RemoteSessionCommand.SetImageQuality:
+
+                    if (RemoteSession.State != RemoteSessionState.Connecting &&
+                        RemoteSession.State != RemoteSessionState.Connected)
+                        return;
+
                     Trace.TraceInformation("Image quality {0}, remote session {1}", int.Parse(args), RemoteSession.Id);
                     RemoteSession.ImageQuality = int.Parse(args);
                     break;
 
                 case RemoteSessionCommand.SetImageQuantity:
+
+                    if (RemoteSession.State != RemoteSessionState.Connecting &&
+                        RemoteSession.State != RemoteSessionState.Connected)
+                        return;
+
                     Trace.TraceInformation("Image quantity {0}, remote session {1}", int.Parse(args), RemoteSession.Id);
                     RemoteSession.ImageQuantity = int.Parse(args);
                     break;
 
                 case RemoteSessionCommand.RequestFullscreenUpdate:
+
+                    if (RemoteSession.State != RemoteSessionState.Connected)
+                        return;
+
                     Trace.TraceInformation("Requesting fullscreen update, all image(s) will now be discarded while waiting for it, remote session {0}", RemoteSession.Id);
                     FullscreenEventPending = true;
                     break;
 
                 case RemoteSessionCommand.RequestRemoteClipboard:
+
+                    if (RemoteSession.State != RemoteSessionState.Connected)
+                        return;
+
                     Trace.TraceInformation("Requesting remote clipboard, remote session {0}", RemoteSession.Id);
                     break;
 
-                case RemoteSessionCommand.ConnectRdpClient:
+                case RemoteSessionCommand.ConnectClient:
+
+                    if (RemoteSession.State != RemoteSessionState.Connecting)
+                        return;
+
                     Trace.TraceInformation("Connecting remote session, remote session {0}", RemoteSession.Id);
                     break;
 
-                case RemoteSessionCommand.CloseRdpClient:
+                case RemoteSessionCommand.CloseClient:
+
+                    if (RemoteSession.State != RemoteSessionState.Disconnecting)
+                        return;
+
                     Trace.TraceInformation("Closing remote session, remote session {0}", RemoteSession.Id);
                     break;
             }
@@ -270,10 +341,11 @@ namespace Myrtille.Web
             }
             catch (Exception exc)
             {
-                Trace.TraceError("Failed to send command {0}, args {1}, remote session {2} ({3})", command, args, RemoteSession.Id, exc);
+                Trace.TraceWarning("Failed to send command {0}, args {1}, remote session {2} ({3})", command, args, RemoteSession.Id, exc);
 
                 // there is a problem with the inputs pipe, force close the remote session in order to avoid it being stuck
-                Client.StopProcess();
+                // it's usually not a big deal, some inputs being sent while the pipes are being disconnected when the host client is closed (and thus before the remote session state is set to disconnected), but better take no risk...
+                HostClient.StopProcess();
             }
         }
 
@@ -281,16 +353,46 @@ namespace Myrtille.Web
 
         #region Inputs
 
-        public void ProcessInputs(string data)
+        public void ProcessInputs(HttpSessionState session, string data)
         {
+            if (RemoteSession.State == RemoteSessionState.NotConnected ||
+                RemoteSession.State == RemoteSessionState.Disconnected)
+                return;
+
             try
             {
+                // monitor the activity of the remote session owner; if its browser window/tab is closed without disconnecting first, or if the connection is lost, there won't be anymore input
+                // in that case, disconnect the remote session after some time (set in web.config); if the session is shared, guests will be disconnected too
+                // this comes in addition (but not replace) the session idle timeout which may defined (or not) for the remote server
+                if (ClientIdleTimeout != null && session.SessionID.Equals(RemoteSession.OwnerSessionID))
+                {
+                    ClientIdleTimeout.Cancel();
+                    ClientIdleTimeout = new CancellationTokenSource();
+                    Task.Delay(_clientIdleTimeoutDelay, ClientIdleTimeout.Token).ContinueWith(task =>
+                    {
+                        if (RemoteSession.State == RemoteSessionState.Connecting ||
+                            RemoteSession.State == RemoteSessionState.Connected)
+                        {
+                            RemoteSession.State = RemoteSessionState.Disconnecting;
+                            SendCommand(RemoteSessionCommand.CloseClient);
+                        }
+                    }, TaskContinuationOptions.NotOnCanceled);
+                }
+
                 var inputs = data.Split(new[] { "," }, StringSplitOptions.RemoveEmptyEntries);
                 foreach (var input in inputs)
                 {
                     if (!string.IsNullOrEmpty(input))
                     {
-                        SendCommand((RemoteSessionCommand)RemoteSessionCommandMapping.FromPrefix[input.Substring(0, 3)], input.Remove(0, 3));
+                        var command = (RemoteSessionCommand)RemoteSessionCommandMapping.FromPrefix[input.Substring(0, 3)];
+                        
+                        // if the remote session is shared, prevent guests from interacting with it
+                        // only allow FSUs to update the guests displays
+                        if (session.SessionID.Equals(RemoteSession.OwnerSessionID) ||
+                            command == RemoteSessionCommand.RequestFullscreenUpdate)
+                        {
+                            SendCommand(command, input.Remove(0, 3));
+                        }
                     }
                 }
             }
@@ -299,6 +401,13 @@ namespace Myrtille.Web
                 Trace.TraceError("Failed to process input(s) {0}, remote session {1} ({2})", data, RemoteSession.Id, exc);
             }
         }
+
+        #endregion
+
+        #region Browser Timeout
+
+        private int _clientIdleTimeoutDelay = 0;
+        public CancellationTokenSource ClientIdleTimeout { get; private set; }
 
         #endregion
 
@@ -356,30 +465,14 @@ namespace Myrtille.Web
                     }
                 }
 
-                // if using websocket(s), send the image
+                // if using websocket(s), bufferize or send the image (depending on config)
                 if (WebSockets.Count > 0)
                 {
                     Trace.TraceInformation("Sending image {0} ({1}) on websocket(s), remote session {2}", image.Idx, (image.Fullscreen ? "screen" : "region"), RemoteSession.Id);
 
                     foreach (var webSocket in WebSockets)
                     {
-                        if (!webSocket.BinaryMode)
-                        {
-                            webSocket.Send(
-                                image.Idx + "," +
-                                image.PosX + "," +
-                                image.PosY + "," +
-                                image.Width + "," +
-                                image.Height + "," +
-                                image.Format.ToString().ToLower() + "," +
-                                image.Quality + "," +
-                                image.Fullscreen.ToString().ToLower() + "," +
-                                Convert.ToBase64String(image.Data));
-                        }
-                        else
-                        {
-                            webSocket.Send(data);
-                        }
+                        webSocket.ProcessImage(image);
                     }
                 }
                 // otherwise, it will be retrieved later
@@ -475,38 +568,27 @@ namespace Myrtille.Web
 
         #region Messages
 
-        private object _messageEventLock;
+        public Hashtable MessageQueues { get; private set; }
 
-        private bool _reloadPage;
-        public bool ReloadPage
+        private void SendMessage(RemoteSessionMessage message)
         {
-            get
+            if (WebSockets.Count > 0)
             {
-                return _reloadPage;
-            }
-            set
-            {
-                lock (_messageEventLock)
+                foreach (var webSocket in WebSockets)
                 {
-                    _reloadPage = value;
+                    webSocket.Send(string.Concat(message.Prefix, message.Text));
                 }
             }
-        }
-
-        public string ClipboardText { get; private set; }
-        private bool _clipboardAvailable;
-        public bool ClipboardAvailable
-        {
-            get
+            else
             {
-                return _clipboardAvailable;
-            }
-            set
-            {
-                lock (_messageEventLock)
+                foreach (List<RemoteSessionMessage> messageQueue in MessageQueues.Values)
                 {
-                    _clipboardAvailable = value;
+                    lock (((ICollection)messageQueue).SyncRoot)
+                    {
+                        messageQueue.Add(message);
+                    }
                 }
+                StopWaitForImageEvent();
             }
         }
 

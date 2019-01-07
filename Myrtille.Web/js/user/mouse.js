@@ -135,9 +135,7 @@ function Mouse(config, dialog, display, network, user)
 
             if (send)
             {
-                if (config.getAdaptiveFullscreenTimeout() > 0)
-                    user.triggerActivity();
-
+                user.triggerActivity();
                 sendEvent(network.getCommandEnum().SEND_MOUSE_MOVE.text + mouseX + '-' + mouseY);
             }
 
@@ -158,12 +156,6 @@ function Mouse(config, dialog, display, network, user)
 	/*** Click                                                                                                                                                                                     ***/
 	/*************************************************************************************************************************************************************************************************/
 
-    // last mouse click position
-    var lastMouseClickX = null;
-    var lastMouseClickY = null;
-    this.getLastMouseClickX = function () { return lastMouseClickX; };
-    this.getLastMouseClickY = function () { return lastMouseClickY; };
-
     function mouseClick(e, down)
     {
         try
@@ -173,8 +165,7 @@ function Mouse(config, dialog, display, network, user)
             if (!processEvent(e))
                 return false;
 
-            if (config.getAdaptiveFullscreenTimeout() > 0)
-                user.triggerActivity();
+            user.triggerActivity();
 
             // IE
             if (display.isIEBrowser() && display.getIEVersion() < 9)
@@ -238,10 +229,6 @@ function Mouse(config, dialog, display, network, user)
                         break;
                 }
             }
-
-            // update the last mouse click position
-            lastMouseClickX = mouseX;
-            lastMouseClickY = mouseY;
         }
         catch (exc)
         {
@@ -272,8 +259,7 @@ function Mouse(config, dialog, display, network, user)
             if (!processEvent(e))
                 return false;
         
-            if (config.getAdaptiveFullscreenTimeout() > 0)
-                user.triggerActivity();
+            user.triggerActivity();
 
             var delta = 0;
 

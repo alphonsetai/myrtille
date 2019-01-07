@@ -17,7 +17,7 @@
 */
 
 using System;
-using System.Web;
+using System.Threading;
 using System.Web.UI;
 using Myrtille.Services.Contracts;
 
@@ -27,7 +27,7 @@ namespace Myrtille.Web
     {
         private EnterpriseServiceClient _enterpriseClient;
         private EnterpriseSession _enterpriseSession;
-        private long? _hostId = null;
+        private long _hostId = 0;
 
         /// <summary>
         /// page init
@@ -50,40 +50,56 @@ namespace Myrtille.Web
             object sender,
             EventArgs e)
         {
-            // retrieve the active enterprise session, if any
-            if (HttpContext.Current.Session[HttpSessionStateVariables.EnterpriseSession.ToString()] != null)
+            try
             {
-                try
-                {
-                    _enterpriseSession = (EnterpriseSession)HttpContext.Current.Session[HttpSessionStateVariables.EnterpriseSession.ToString()];
-                }
-                catch (Exception exc)
-                {
-                    System.Diagnostics.Trace.TraceError("Failed to retrieve the enterprise session for the http session {0}, ({1})", HttpContext.Current.Session.SessionID, exc);
-                }
-            }
+                if (Session[HttpSessionStateVariables.EnterpriseSession.ToString()] == null)
+                    throw new NullReferenceException();
 
-            // retrieve the host
-            if (Request["hostId"] != null)
-            {
-                long lResult = 0;
-                if (long.TryParse(Request["hostId"], out lResult))
-                {
-                    _hostId = lResult;
-                }
+                _enterpriseSession = (EnterpriseSession)Session[HttpSessionStateVariables.EnterpriseSession.ToString()];
 
                 try
                 {
-                    var host = _enterpriseClient.GetHost(_hostId.Value, _enterpriseSession.SessionID);
-                    if (host != null)
+                    if (!_enterpriseSession.IsAdmin)
                     {
-                        hostName.InnerText = host.HostName;
+                        Response.Redirect("~/", true);
+                    }
+
+                    // retrieve the host
+                    if (Request["hostId"] != null)
+                    {
+                        long hostId;
+                        if (!long.TryParse(Request["hostId"], out hostId))
+                        {
+                            hostId = 0;
+                        }
+
+                        if (hostId != 0)
+                        {
+                            _hostId = hostId;
+
+                            try
+                            {
+                                var host = _enterpriseClient.GetHost(_hostId, _enterpriseSession.SessionID);
+                                if (host != null)
+                                {
+                                    hostName.InnerText = host.HostName;
+                                }
+                            }
+                            catch (Exception exc)
+                            {
+                                System.Diagnostics.Trace.TraceError("Failed to retrieve host {0}, ({1})", _hostId, exc);
+                            }
+                        }
                     }
                 }
-                catch (Exception exc)
+                catch (ThreadAbortException)
                 {
-                    System.Diagnostics.Trace.TraceError("Failed to retrieve host {0}, ({1})", _hostId, exc);
+                    // occurs because the response is ended after redirect
                 }
+            }
+            catch (Exception exc)
+            {
+                System.Diagnostics.Trace.TraceError("Failed to retrieve the active enterprise session ({0})", exc);
             }
         }
 
@@ -96,12 +112,12 @@ namespace Myrtille.Web
             object sender,
             EventArgs e)
         {
-            if (_enterpriseClient == null || _enterpriseSession == null || !_hostId.HasValue || string.IsNullOrEmpty(userName.Value) || string.IsNullOrEmpty(userPassword.Value))
+            if (_enterpriseClient == null || _enterpriseSession == null || _hostId == 0 || string.IsNullOrEmpty(userName.Value) || string.IsNullOrEmpty(userPassword.Value))
                 return;
 
             try
             {
-                var url = _enterpriseClient.CreateUserSession(_enterpriseSession.SessionID, _hostId.Value, userName.Value, userPassword.Value);
+                var url = _enterpriseClient.CreateUserSession(_enterpriseSession.SessionID, _hostId, userName.Value, userPassword.Value);
                 if (!string.IsNullOrEmpty(url))
                 {
                     sessionUrl.Value = Request.Url.Scheme + "://" + Request.Url.Host + (Request.Url.Port != 80 && Request.Url.Port != 443 ? ":" + Request.Url.Port : "")  + Request.ApplicationPath + "/"  + url + "&__EVENTTARGET=&__EVENTARGUMENT=&connect=Connect%21";

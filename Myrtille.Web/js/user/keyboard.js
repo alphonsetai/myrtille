@@ -45,8 +45,7 @@ function Keyboard(config, dialog, display, network, user)
         if (e == null)
             return false;
 
-        if (config.getAdaptiveFullscreenTimeout() > 0)
-            user.triggerActivity();
+        user.triggerActivity();
 
         return true;
     }
@@ -208,12 +207,10 @@ function Keyboard(config, dialog, display, network, user)
             // check key type
 	        if (keyCodeToCharCode[keyCode] == null)
             {
-	            //dialog.showDebug('key is not a character, sending code: ' + keyCode);
 	            sendEvent(keyCode, false, false);
             }
 	        else
 	        {
-                //dialog.showDebug('key is a character, sending code: ' + keyCodeToCharCode[keyCode]);
 	            sendEvent(keyCodeToCharCode[keyCode], false, true);
 	            keyCodeToCharCode[keyCode] = null;
 	        }
@@ -237,6 +234,8 @@ function Keyboard(config, dialog, display, network, user)
     {
         if (keyCode != null)
         {
+            //dialog.showDebug('key' + (keyPressed ? 'down' : 'up') + ' is ' + (keyIsChar ? '' : 'not ') + 'a character, sending code: ' + keyCode);
+
             // if enabled, display the typed text in an helper div (helpful to debug keyboard issues or in case of high network latency)
             if (config.getKeyboardHelperEnabled() && keyPressed && keyIsChar)
                 dialog.showKeyboardHelper(String.fromCharCode(keyCode));

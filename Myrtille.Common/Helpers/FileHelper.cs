@@ -82,15 +82,17 @@ namespace Myrtille.Helpers
             HttpResponse response,
             Stream fileStream,
             string fileName,
-            bool endResponse)
+            bool endResponse,
+            string mimeType = "application/octet-stream",
+            string contentDisposition = "attachment")
         {
             try
             {
                 if (fileStream == null)
                     throw new Exception("file stream is null, operation aborted");
 
-                response.ContentType = "application/octet-stream";
-                response.AppendHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\";");
+                response.ContentType = mimeType;
+                response.AppendHeader("Content-Disposition", contentDisposition + "; filename=\"" + fileName + "\";");
 
                 if (fileStream.CanSeek)
                 {

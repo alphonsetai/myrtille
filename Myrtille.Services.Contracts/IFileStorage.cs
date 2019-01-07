@@ -16,6 +16,7 @@
     limitations under the License.
 */
 
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.ServiceModel;
@@ -26,7 +27,7 @@ namespace Myrtille.Services.Contracts
     public class UploadRequest
     {
         [MessageHeader(MustUnderstand = true)]
-        public int RemoteSessionId { get; set; }
+        public Guid RemoteSessionId { get; set; }
 
         [MessageHeader(MustUnderstand = true)]
         public string UserDomain { get; set; }
@@ -52,7 +53,7 @@ namespace Myrtille.Services.Contracts
         /// </summary>
         [OperationContract]
         List<string> GetUserDocumentsFolderFiles(
-            int remoteSessionId,
+            Guid remoteSessionId,
             string userDomain,
             string userName,
             string userPassword);
@@ -69,7 +70,7 @@ namespace Myrtille.Services.Contracts
         /// </summary>
         [OperationContract]
         Stream DownloadFileFromUserDocumentsFolder(
-            int remoteSessionId,
+            Guid remoteSessionId,
             string userDomain,
             string userName,
             string userPassword,

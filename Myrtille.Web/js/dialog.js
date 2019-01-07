@@ -27,7 +27,9 @@ function Dialog(config)
     /*************************************************************************************************************************************************************************************************/
 
     var statDiv = null;
-    
+
+    var statHostType = 'RDP';
+
     var statLatency = 0;
     var statBuffer = 'NONE';
     
@@ -51,22 +53,23 @@ function Dialog(config)
 
     var showStatEnum =
     {
-        LATENCY: { value: 0, text: 'LATENCY' },
-        BUFFER: { value: 1, text: 'BUFFER' },
-        BANDWIDTH_USAGE: { value: 2, text: 'BANDWIDTH_USAGE' },
-        BANDWIDTH_SIZE: { value: 3, text: 'BANDWIDTH_SIZE' },
-        NETWORK_MODE: { value: 4, text: 'NETWORK_MODE' },
-        DISPLAY_MODE: { value: 5, text: 'DISPLAY_MODE' },
-        IMAGE_COUNT: { value: 6, text: 'IMAGE_COUNT' },
-        IMAGE_COUNT_PER_SEC: { value: 7, text: 'IMAGE_COUNT_PER_SEC' },
-        IMAGE_COUNT_OK: { value: 8, text: 'IMAGE_COUNT_OK' },
-        IMAGE_COUNT_MAX: { value: 9, text: 'IMAGE_COUNT_MAX' },
-        IMAGE_INDEX: { value: 10, text: 'IMAGE_INDEX' },
-        IMAGE_FORMAT: { value: 11, text: 'IMAGE_FORMAT' },
-        IMAGE_QUALITY: { value: 12, text: 'IMAGE_QUALITY' },
-        IMAGE_QUANTITY: { value: 13, text: 'IMAGE_QUANTITY' },
-        IMAGE_MODE: { value: 14, text: 'IMAGE_MODE' },
-        IMAGE_SIZE: { value: 15, text: 'IMAGE_SIZE' }
+        HOST_TYPE: { value: 0, text: 'HOST_TYPE' },
+        LATENCY: { value: 1, text: 'LATENCY' },
+        BUFFER: { value: 2, text: 'BUFFER' },
+        BANDWIDTH_USAGE: { value: 3, text: 'BANDWIDTH_USAGE' },
+        BANDWIDTH_SIZE: { value: 4, text: 'BANDWIDTH_SIZE' },
+        NETWORK_MODE: { value: 5, text: 'NETWORK_MODE' },
+        DISPLAY_MODE: { value: 6, text: 'DISPLAY_MODE' },
+        IMAGE_COUNT: { value: 7, text: 'IMAGE_COUNT' },
+        IMAGE_COUNT_PER_SEC: { value: 8, text: 'IMAGE_COUNT_PER_SEC' },
+        IMAGE_COUNT_OK: { value: 9, text: 'IMAGE_COUNT_OK' },
+        IMAGE_COUNT_MAX: { value: 10, text: 'IMAGE_COUNT_MAX' },
+        IMAGE_INDEX: { value: 11, text: 'IMAGE_INDEX' },
+        IMAGE_FORMAT: { value: 12, text: 'IMAGE_FORMAT' },
+        IMAGE_QUALITY: { value: 13, text: 'IMAGE_QUALITY' },
+        IMAGE_QUANTITY: { value: 14, text: 'IMAGE_QUANTITY' },
+        IMAGE_MODE: { value: 15, text: 'IMAGE_MODE' },
+        IMAGE_SIZE: { value: 16, text: 'IMAGE_SIZE' }
     };
 
     if (Object.freeze)
@@ -100,6 +103,10 @@ function Dialog(config)
 
             switch (key)
             {
+                case showStatEnum.HOST_TYPE:
+                    statHostType = value;
+                    break;
+
                 case showStatEnum.LATENCY:
                     statLatency = value;
                     break;
@@ -165,7 +172,8 @@ function Dialog(config)
                     break;
             }
 
-	        statDiv.innerHTML =
+            statDiv.innerHTML =
+                'TYPE: ' + statHostType.text + ', ' +
                 'LATENCY (ms): ' + statLatency + ', ' +
                 'BUFFER (ms): ' + statBuffer + ', ' +
                 'MOUSE SAMPLING (%): ' + (config.getMouseMoveSamplingRate() > 0 ? config.getMouseMoveSamplingRate() : 'NONE') + ', ' +

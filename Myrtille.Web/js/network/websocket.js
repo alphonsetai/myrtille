@@ -172,9 +172,10 @@ function Websocket(config, dialog, display, network)
             }
 
             wsSend(
-                (data == null ? '' : data) +
-                '|' + display.getImgIdx() +
-                '|' + startTime);
+                (data == null ? '' : encodeURIComponent(data)) +
+                '&' + display.getImgIdx() +
+                '&' + network.getRoundtripDurationAvg() +
+                '&' + startTime);
 
             if (buffer != null)
             {
@@ -195,100 +196,198 @@ function Websocket(config, dialog, display, network)
 
             if (data != null && data != '')
             {
-                var message = '';
+                var images = null;
+                var dataView = null;
 
                 if (config.getImageMode() != config.getImageModeEnum().BINARY)
                 {
-                    message = data;
-                }
-                else
-                {
-                    var imgTag = new Uint32Array(data, 0, 1);
-
-                    //dialog.showDebug('image tag: ' + imgTag[0]);
-                    if (imgTag[0] != 0)
+                    if (config.getHostType() == config.getHostTypeEnum().RDP)
                     {
-                        message = bytesToStr(data);
-                    }
-                }
-
-                // reload page
-                if (message == 'reload')
-                {
-                    window.location.href = window.location.href;
-                }
-                // remote clipboard
-                else if (message.length >= 10 && message.substr(0, 10) == 'clipboard|')
-                {
-                    showDialogPopup('showDialogPopup', 'ShowDialog.aspx', 'Ctrl+C to copy to local clipboard (Cmd-C on Mac)', message.substr(10, message.length - 10), true);
-                }
-                // disconnected session
-                else if (message == 'disconnected')
-                {
-                    window.location.href = config.getHttpServerUrl() + '?';
-                }
-                // server ack
-                else if (message.length >= 4 && message.substr(0, 4) == 'ack,')
-                {
-                    var ackInfo = message.split(',');
-                    //dialog.showDebug('websocket ack: ' + ackInfo[1]);
-
-                    // update the average "latency"
-                    network.updateLatency(parseInt(ackInfo[1]));
-                }
-                // new image
-                else
-                {
-                    var imgInfo, idx, posX, posY, width, height, format, quality, fullscreen, imgData;
-
-                    if (config.getImageMode() != config.getImageModeEnum().BINARY)
-                    {
-                        imgInfo = message.split(',');
-
-                        idx = parseInt(imgInfo[0]);
-                        posX = parseInt(imgInfo[1]);
-                        posY = parseInt(imgInfo[2]);
-                        width = parseInt(imgInfo[3]);
-                        height = parseInt(imgInfo[4]);
-                        format = imgInfo[5];
-                        quality = parseInt(imgInfo[6]);
-                        fullscreen = imgInfo[7] == 'true';
-                        imgData = imgInfo[8];
+                        if (data.indexOf(';') != -1)
+                        {
+                            //dialog.showDebug('base64 data');
+                            images = data.split(';');
+                            //dialog.showDebug('buffered images: ' + (images.length - 1));
+                        }
+                        else
+                        {
+                            //dialog.showDebug('text data');
+                        }
                     }
                     else
                     {
-                        imgInfo = new Uint32Array(data, 4, 8);
+                        //dialog.showDebug('terminal data');
+                    }
+                }
+                else
+                {
+                    //dialog.showDebug('binary data');
+                    dataView = new DataView(data);
+                    images = 0;
+                }
 
-                        idx = imgInfo[0];
-                        posX = imgInfo[1];
-                        posY = imgInfo[2];
-                        width = imgInfo[3];
-                        height = imgInfo[4];
-                        format = display.getFormatText(imgInfo[5]);
-                        quality = imgInfo[6];
-                        fullscreen = imgInfo[7] == 1;
-                        imgData = new Uint8Array(data, 36, data.byteLength - 36);
+                var complete = false;
+                var pos = 0;
+
+                while (!complete)
+                {
+                    var text = '';
+
+                    if (config.getImageMode() != config.getImageModeEnum().BINARY)
+                    {
+                        if (images == null)
+                        {
+                            text = data;
+                            //dialog.showDebug('message: ' + text);
+                            complete = true;
+                        }
+                        else
+                        {
+                            text = images[pos];
+                            //dialog.showDebug('image: ' + text);
+                        }
+                    }
+                    else
+                    {
+                        var chunkSize = dataView.getUint32(pos, true);
+                        //dialog.showDebug('chunk size: ' + chunkSize);
+
+                        var imgTag = dataView.getUint32(pos + 4, true);
+                        //dialog.showDebug('image tag: ' + imgTag);
+
+                        if (imgTag != 0)
+                        {
+                            var bytes = new Uint8Array(data, 4, data.byteLength - 4);
+                            text = bytesToStr(bytes);
+                            //dialog.showDebug('message: ' + text);
+                            complete = true;
+                        }
                     }
 
-                    // update bandwidth usage
-                    network.setBandwidthUsage(network.getBandwidthUsage() + imgData.length);
-
-                    // if a fullscreen request is pending, release it
-                    if (fullscreen && fullscreenPending)
+                    // reload page
+                    if (text == 'reload')
                     {
-                        //dialog.showDebug('received a fullscreen update, divs will be cleaned');
-                        fullscreenPending = false;
+                        window.location.href = window.location.href;
                     }
-
-                    // add image to display
-                    display.addImage(idx, posX, posY, width, height, format, quality, fullscreen, imgData);
-
-                    // if using divs and count reached a reasonable number, request a fullscreen update
-                    if (config.getDisplayMode() != config.getDisplayModeEnum().CANVAS && display.getImgCount() >= config.getImageCountOk() && !fullscreenPending)
+                    // receive terminal data, send to xtermjs
+                    else if (text.length >= 5 && text.substr(0, 5) == 'term|')
                     {
-                        //dialog.showDebug('reached a reasonable number of divs, requesting a fullscreen update');
-                        fullscreenPending = true;
-                        network.send(network.getCommandEnum().REQUEST_FULLSCREEN_UPDATE.text);
+                        /* IE hack!
+
+                        for some reason, IE (all versions) is very slow to render the terminal, whatever the connection speed
+                        while I was debugging, I found the rendering was way faster after displaying the received data into the debug div (?!)
+                        
+                        I don't really understand why... perhaps it's due to the fact the data is already into the DOM when the terminal handles it...
+                        so I made up an hidden "cache div" and put the data on it before writing to the terminal
+                        I didn't found any other solution but it's pretty harmless anyway as the cache div is hidden
+
+                        other browsers don't seem to have the same issue, neither benefit from that hack, so IE only for now...
+                        also interesting to note, this issue occurs only when using websockets (long-polling and xhr only: ok)
+
+                        */
+
+                        if (display.isIEBrowser())
+                        {
+                            var cacheDiv = document.getElementById('cacheDiv');
+                            if (cacheDiv != null)
+                            {
+                                cacheDiv.innerHTML = text.substr(5, text.length - 5);
+                            }
+                        }
+
+                        display.getTerminalDiv().writeTerminal(text.substr(5, text.length - 5));
+                    }
+                    // remote clipboard
+                    else if (text.length >= 10 && text.substr(0, 10) == 'clipboard|')
+                    {
+                        showDialogPopup('showDialogPopup', 'ShowDialog.aspx', 'Ctrl+C to copy to local clipboard (Cmd-C on Mac)', text.substr(10, text.length - 10), true);
+                    }
+                    // print job
+                    else if (text.length >= 9 && text.substr(0, 9) == 'printjob|')
+                    {
+                        downloadPdf(text.substr(9, text.length - 9));
+                    }
+                    // disconnected session
+                    else if (text == 'disconnected')
+                    {
+                        window.location.href = config.getHttpServerUrl();
+                    }
+                    // server ack
+                    else if (text.length >= 4 && text.substr(0, 4) == 'ack,')
+                    {
+                        var ackInfo = text.split(',');
+                        //dialog.showDebug('websocket ack: ' + ackInfo[1]);
+
+                        // update the average "latency"
+                        network.updateLatency(parseInt(ackInfo[1]));
+                    }
+                    // new image
+                    else
+                    {
+                        var imgInfo, idx, posX, posY, width, height, format, quality, fullscreen, imgData;
+
+                        if (config.getImageMode() != config.getImageModeEnum().BINARY)
+                        {
+                            imgInfo = text.split(',');
+
+                            idx = parseInt(imgInfo[0]);
+                            posX = parseInt(imgInfo[1]);
+                            posY = parseInt(imgInfo[2]);
+                            width = parseInt(imgInfo[3]);
+                            height = parseInt(imgInfo[4]);
+                            format = imgInfo[5];
+                            quality = parseInt(imgInfo[6]);
+                            fullscreen = imgInfo[7] == 'true';
+                            imgData = imgInfo[8];
+
+                            pos++;
+                            complete = pos == images.length - 1;
+                        }
+                        else
+                        {
+                            idx = dataView.getUint32(pos + 8, true);
+                            posX = dataView.getUint32(pos + 12, true);
+                            posY = dataView.getUint32(pos + 16, true);
+                            width = dataView.getUint32(pos + 20, true);
+                            height = dataView.getUint32(pos + 24, true);
+                            format = display.getFormatText(dataView.getUint32(pos + 28, true));
+                            quality = dataView.getUint32(pos + 32, true);
+                            fullscreen = dataView.getUint32(pos + 36, true) == 1;
+                            imgData = new Uint8Array(data, pos + 40, chunkSize - 36);
+
+                            pos += chunkSize + 4;
+                            complete = pos == data.byteLength;
+
+                            images++;
+                            if (complete)
+                            {
+                                //dialog.showDebug('buffered images: ' + images);
+                            }
+                        }
+
+                        //dialog.showDebug('position: ' + pos);
+                        //dialog.showDebug('complete: ' + complete);
+
+                        // update bandwidth usage
+                        network.setBandwidthUsage(network.getBandwidthUsage() + imgData.length);
+
+                        // if a fullscreen request is pending, release it
+                        if (fullscreen && fullscreenPending)
+                        {
+                            //dialog.showDebug('received a fullscreen update, divs will be cleaned');
+                            fullscreenPending = false;
+                        }
+
+                        // add image to display
+                        display.addImage(idx, posX, posY, width, height, format, quality, fullscreen, imgData);
+
+                        // if using divs and count reached a reasonable number, request a fullscreen update
+                        if (config.getDisplayMode() != config.getDisplayModeEnum().CANVAS && display.getImgCount() >= config.getImageCountOk() && !fullscreenPending)
+                        {
+                            //dialog.showDebug('reached a reasonable number of divs, requesting a fullscreen update');
+                            fullscreenPending = true;
+                            network.send(network.getCommandEnum().REQUEST_FULLSCREEN_UPDATE.text + 'cleanup');
+                        }
                     }
                 }
             }

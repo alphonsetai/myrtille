@@ -31,24 +31,33 @@ namespace Myrtille.Services
     {
         #region process
 
-        private int _remoteSessionId;
+        private Guid _remoteSessionId;
         private Process _process;
         private IRemoteSessionProcessCallback _callback;
 
-        //FreeRDP - A Free Remote Desktop Protocol Client (https://github.com/FreeRDP/FreeRDP)
-        //Usage: https://github.com/awakecoding/FreeRDP-Manuals/blob/master/User/FreeRDP-User-Manual.markdown
         public void StartProcess(
-            int remoteSessionId,
+            Guid remoteSessionId,
+            HostTypeEnum hostType,
+            SecurityProtocolEnum securityProtocol,
             string serverAddress,
+            string vmGuid,
             string userDomain,
             string userName,
             string startProgram,
             int clientWidth,
             int clientHeight,
             bool allowRemoteClipboard,
-            SecurityProtocolEnum securityProtocol)
+            bool allowPrintDownload)
         {
-            Trace.TraceInformation("Connecting remote session {0}, server {1}, domain {2}, user {3}, program {4}", remoteSessionId, serverAddress, string.IsNullOrEmpty(userDomain) ? "(none)" : userDomain, userName, string.IsNullOrEmpty(startProgram) ? "(none)" : startProgram);
+            Trace.TraceInformation("Connecting remote session {0}, type {1}, security {2}, server (:port) {3}, vm {4}, domain {5}, user {6}, program {7}",
+                remoteSessionId,
+                hostType,
+                hostType == HostTypeEnum.RDP ? securityProtocol.ToString().ToUpper() : "N/A",
+                serverAddress,
+                hostType == HostTypeEnum.RDP ? (string.IsNullOrEmpty(vmGuid) ? "(none)" : vmGuid) : "N/A",
+                hostType == HostTypeEnum.RDP ? (string.IsNullOrEmpty(userDomain) ? "(none)" : userDomain) : "N/A",
+                userName,
+                hostType == HostTypeEnum.RDP ? (string.IsNullOrEmpty(startProgram) ? "(none)" : startProgram) : "N/A");
 
             try
             {
@@ -57,27 +66,37 @@ namespace Myrtille.Services
                 // as there is 1 client per remote session, the remote session id is set for the current service instance
                 _remoteSessionId = remoteSessionId;
 
-                // as the rdp server uses the client numlock state, ensure it's off
-                // server side, ensure that HKEY_USERS\.DEFAULT\Control Panel\Keyboard: InitialKeyboardIndicators is set to 0 (numlock off)
-                SetNumLock(false);
-
                 _process = new Process();
 
-                // see https://github.com/cedrozor/myrtille/blob/master/DOCUMENTATION.md#build for information and steps to build FreeRDP along with myrtille
+                // select the host client executable based on the host type
+                var clientFilePath = string.Empty;
+                var clientFileName = string.Empty;
+                switch (hostType)
+                {
+                    // see https://github.com/cedrozor/myrtille/blob/master/DOCUMENTATION.md#build for information and steps to build FreeRDP along with myrtille
+                    case HostTypeEnum.RDP:
+                        clientFilePath = @"Myrtille.RDP\FreeRDP";
+                        clientFileName = "wfreerdp.exe";
+                        break;
+                    case HostTypeEnum.SSH:
+                        clientFilePath = @"Myrtille.SSH\bin";
+                        clientFileName = "Myrtille.SSH.exe";
+                        break;
+                }
 
                 if (Environment.UserInteractive)
                 {
-                    _process.StartInfo.FileName = Path.Combine(AppDomain.CurrentDomain.BaseDirectory.Replace(@"Myrtille.Services\bin", @"Myrtille.RDP\FreeRDP"), "wfreerdp.exe");
+                    _process.StartInfo.FileName = Path.Combine(AppDomain.CurrentDomain.BaseDirectory.Replace(@"Myrtille.Services\bin", clientFilePath), clientFileName);
                 }
                 else
                 {
-                    _process.StartInfo.FileName = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wfreerdp.exe");
+                    _process.StartInfo.FileName = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, clientFileName);
                 }
 
-                // ensure the FreeRDP executable does exists
+                // ensure the host client executable does exists
                 if (!File.Exists(_process.StartInfo.FileName))
                 {
-                    var msg = "The FreeRDP executable is missing. Please read documentation for steps to build it";
+                    var msg = string.Format("The host client executable ({0}) is missing. Please read documentation for steps to build it", _process.StartInfo.FileName);
                     if (Environment.UserInteractive)
                     {
                         MessageBox.Show(msg);
@@ -87,112 +106,136 @@ namespace Myrtille.Services
                 }
 
                 // log remote session events into a file (located into <Myrtille folder>\log)
-                var remoteSessionLog = false;
-                bool bResult = false;
-                if (bool.TryParse(ConfigurationManager.AppSettings["RemoteSessionLog"], out bResult))
+                bool remoteSessionLog;
+                if (!bool.TryParse(ConfigurationManager.AppSettings["RemoteSessionLog"], out remoteSessionLog))
                 {
-                    remoteSessionLog = bResult;
+                    remoteSessionLog = false;
                 }
 
-                #region FreeRDP params
+                #region RDP
 
-                // color depth
-                var bpp = 16;
-                int iResult = 16;
-                if (int.TryParse(ConfigurationManager.AppSettings["FreeRDPBpp"], out iResult))
+                if (hostType == HostTypeEnum.RDP)
                 {
-                    bpp = iResult;
-                }
+                    // color depth
+                    int bpp;
+                    if (!int.TryParse(ConfigurationManager.AppSettings["FreeRDPBpp"], out bpp))
+                    {
+                        bpp = 16;
+                    }
 
-                // gdi mode (sw: software, hw: hardware). default software because there is a palette issue with windows server 2008; also, the performance gain is small and even null on most virtual machines, when hardware isn't available
-                var gdi = "sw";
-                if (ConfigurationManager.AppSettings["FreeRDPGdi"] != null)
-                {
-                    gdi = ConfigurationManager.AppSettings["FreeRDPGdi"];
-                }
+                    // gdi mode (sw: software, hw: hardware). default software because there is a palette issue with windows server 2008; also, the performance gain is small and even null on most virtual machines, when hardware isn't available
+                    var gdi = "sw";
+                    if (ConfigurationManager.AppSettings["FreeRDPGdi"] != null)
+                    {
+                        gdi = ConfigurationManager.AppSettings["FreeRDPGdi"];
+                    }
 
-                // wallpaper
-                var wallpaper = false;
-                if (bool.TryParse(ConfigurationManager.AppSettings["FreeRDPWallpaper"], out bResult))
-                {
-                    wallpaper = bResult;
-                }
+                    // wallpaper
+                    bool wallpaper;
+                    if (!bool.TryParse(ConfigurationManager.AppSettings["FreeRDPWallpaper"], out wallpaper))
+                    {
+                        wallpaper = false;
+                    }
 
+                    // desktop composition
+                    bool aero;
+                    if (!bool.TryParse(ConfigurationManager.AppSettings["FreeRDPAero"], out aero))
+                    {
+                        aero = false;
+                    }
 
-                // desktop composition
-                var aero = false;
-                if (bool.TryParse(ConfigurationManager.AppSettings["FreeRDPAero"], out bResult))
-                {
-                    aero = bResult;
-                }
+                    // window drag
+                    bool windowDrag;
+                    if (!bool.TryParse(ConfigurationManager.AppSettings["FreeRDPWindowDrag"], out windowDrag))
+                    {
+                        windowDrag = false;
+                    }
 
-                // window drag
-                var windowDrag = false;
-                if (bool.TryParse(ConfigurationManager.AppSettings["FreeRDPWindowDrag"], out bResult))
-                {
-                    windowDrag = bResult;
-                }
+                    // menu animations
+                    bool menuAnims;
+                    if (!bool.TryParse(ConfigurationManager.AppSettings["FreeRDPMenuAnims"], out menuAnims))
+                    {
+                        menuAnims = false;
+                    }
 
-                // menu animations
-                var menuAnims = false;
-                if (bool.TryParse(ConfigurationManager.AppSettings["FreeRDPMenuAnims"], out bResult))
-                {
-                    menuAnims = bResult;
-                }
+                    // themes
+                    bool themes;
+                    if (!bool.TryParse(ConfigurationManager.AppSettings["FreeRDPThemes"], out themes))
+                    {
+                        themes = false;
+                    }
 
-                // themes
-                var themes = false;
-                if (bool.TryParse(ConfigurationManager.AppSettings["FreeRDPThemes"], out bResult))
-                {
-                    themes = bResult;
-                }
+                    // smooth fonts (requires ClearType enabled on the remote server)
+                    bool smoothFonts;
+                    if (!bool.TryParse(ConfigurationManager.AppSettings["FreeRDPSmoothFonts"], out smoothFonts))
+                    {
+                        smoothFonts = true;
+                    }
 
-                // smooth fonts (requires ClearType enabled on the remote server)
-                var smoothFonts = true;
-                if (bool.TryParse(ConfigurationManager.AppSettings["FreeRDPSmoothFonts"], out bResult))
-                {
-                    smoothFonts = bResult;
-                }
+                    // ignore certificate warning (when using NLA); may happen, for example, with a self-signed certificate (not trusted) or if the server joined a domain after the certificate was issued (name mismatch). more details here: http://www.vkernel.ro/blog/configuring-certificates-in-2012r2-remote-desktop-services-rds
+                    bool certIgnore;
+                    if (!bool.TryParse(ConfigurationManager.AppSettings["FreeRDPCertIgnore"], out certIgnore))
+                    {
+                        certIgnore = true;
+                    }
 
-                // ignore certificate warning (when using NLA); may happen, for example, with a self-signed certificate (not trusted) or if the server joined a domain after the certificate was issued (name mismatch). more details here: http://www.vkernel.ro/blog/configuring-certificates-in-2012r2-remote-desktop-services-rds
-                var certIgnore = true;
-                if (bool.TryParse(ConfigurationManager.AppSettings["FreeRDPCertIgnore"], out bResult))
-                {
-                    certIgnore = bResult;
+                    // pdf virtual printer redirection
+
+                    // TOCHECK: for some reason, using the exact pdf virtual printer driver name ("PDF Scribe Virtual Printer") doesn't work (the printer doesn't show into the remote session) with wfreerdp, while it works with mstsc (!)
+                    // it may have something to do with the driver not being installed on the remote server, but as the underlying driver is the standard "Microsoft Postscript Printer Driver (v3)" (pscript5.dll), it should have worked...
+                    // as a workaround for now, the same way freerdp does in CUPS mode (printer redirection under Linux), it's possible to use the "MS Publisher Imagesetter" driver; it's also based on pscript5.dll and support basic print features (portrait/landscape orientation, custom fonts, color mode, etc.)
+
+                    // as the rdp server uses the client numlock state, ensure it's off
+                    // server side, ensure that HKEY_USERS\.DEFAULT\Control Panel\Keyboard: InitialKeyboardIndicators is set to 0 (numlock off)
+                    SetNumLock(false);
+
+                    // https://github.com/FreeRDP/FreeRDP/wiki/CommandLineInterface
+                    // Syntax: /flag enables flag, +toggle or -toggle enables or disables toggle. /toggle and +toggle are the same. Options with values work like this: /option:<value>
+                    // as the process command line can be displayed into the task manager / process explorer, the connection settings (including user credentials) are now passed to the rdp client through the inputs pipe
+                    _process.StartInfo.Arguments =
+                        "/myrtille-sid:" + _remoteSessionId +                                                                       // session id
+                        (!Environment.UserInteractive ? string.Empty : " /myrtille-window") +                                       // session window
+                        (!remoteSessionLog ? string.Empty : " /myrtille-log") +                                                     // session log
+                        " /w:" + clientWidth +                                                                                      // display width
+                        " /h:" + clientHeight +                                                                                     // display height
+                        " /bpp:" + bpp +                                                                                            // color depth
+                        " /gdi:" + gdi +                                                                                            // gdi mode (sw: software, hw: hardware)
+                        (wallpaper ? " +" : " -") + "wallpaper" +                                                                   // wallpaper
+                        (aero ? " +" : " -") + "aero" +                                                                             // desktop composition
+                        (windowDrag ? " +" : " -") + "window-drag" +                                                                // window drag
+                        (menuAnims ? " +" : " -") + "menu-anims" +                                                                  // menu animations
+                        (themes ? " +" : " -") + "themes" +                                                                         // themes
+                        (smoothFonts ? " +" : " -") + "fonts" +                                                                     // smooth fonts (requires ClearType enabled on the remote server)
+                        " +compression" +                                                                                           // bulk compression (level is autodetected from the rdp version)
+                        (certIgnore ? " /cert-ignore" : string.Empty) +                                                             // ignore certificate warning (when using NLA)
+                        (allowPrintDownload ? " /printer:\"Myrtille PDF\",\"MS Publisher Imagesetter\"" : string.Empty) +           // pdf virtual printer
+                        " -mouse-motion" +                                                                                          // mouse motion
+                        " +bitmap-cache" +                                                                                          // bitmap cache
+                        " -offscreen-cache" +                                                                                       // offscreen cache
+                        " +glyph-cache" +                                                                                           // glyph cache
+                        " -async-input" +                                                                                           // async input
+                        " -async-update" +                                                                                          // async update
+                        " -async-channels" +                                                                                        // async channels
+                        (allowRemoteClipboard ? " +" : " -") + "clipboard" +                                                        // clipboard support
+                        (securityProtocol != SecurityProtocolEnum.auto ? " /sec:" + securityProtocol.ToString() : string.Empty) +   // security protocol
+                        " /audio-mode:2";                                                                                           // audio mode (not supported for now, 2: do not play)
                 }
 
                 #endregion
 
-                // https://github.com/FreeRDP/FreeRDP/wiki/CommandLineInterface
-                // Syntax: /flag enables flag, +toggle or -toggle enables or disables toggle. /toggle and +toggle are the same. Options with values work like this: /option:<value>
-                // as the process command line can be displayed into the task manager / process explorer, the connection settings (including user credentials) are now passed to the rdp client through the inputs pipe
-                _process.StartInfo.Arguments =
-                    "/myrtille-sid:" + _remoteSessionId +                                                           // session id
-                    (!Environment.UserInteractive ? string.Empty : " /myrtille-window") +                           // session window
-                    (!remoteSessionLog ? string.Empty : " /myrtille-log") +                                         // session log
-                    " /w:" + clientWidth +                                                                          // display width
-                    " /h:" + clientHeight +                                                                         // display height
-                    " /bpp:" + bpp +                                                                                // color depth
-                    " /gdi:" + gdi +                                                                                // gdi mode (sw: software, hw: hardware)
-                    (wallpaper ? " +" : " -") + "wallpaper" +                                                       // wallpaper
-                    (aero ? " +" : " -") + "aero" +                                                                 // desktop composition
-                    (windowDrag ? " +" : " -") + "window-drag" +                                                    // window drag
-                    (menuAnims ? " +" : " -") + "menu-anims" +                                                      // menu animations
-                    (themes ? " +" : " -") + "themes" +                                                             // themes
-                    (smoothFonts ? " +" : " -") + "fonts" +                                                         // smooth fonts (requires ClearType enabled on the remote server)
-                    " +compression" +                                                                               // bulk compression (level is autodetected from the rdp version)
-                    (certIgnore ? " /cert-ignore" : "") +                                                           // ignore certificate warning (when using NLA)
-                    " -mouse-motion" +                                                                              // mouse motion
-                    " +bitmap-cache" +                                                                              // bitmap cache
-                    " -offscreen-cache" +                                                                           // offscreen cache
-                    " +glyph-cache" +                                                                               // glyph cache
-                    " -async-input" +                                                                               // async input
-                    " -async-update" +                                                                              // async update
-                    " -async-channels" +                                                                            // async channels
-                    " -async-transport" +                                                                           // async transport
-                    (allowRemoteClipboard ? " +" : " -") + "clipboard" +                                            // clipboard support
-                    (securityProtocol != SecurityProtocolEnum.auto ? " /sec:" + securityProtocol.ToString() : "") + // security protocol
-                    " /audio-mode:2";                                                                               // audio mode (not supported for now, 2: do not play)
+                #region SSH
+
+                else
+                {
+                    _process.StartInfo.Arguments =
+                        "/myrtille-sid:" + _remoteSessionId +                                                                       // session id
+                        (!Environment.UserInteractive ? string.Empty : " /myrtille-window") +                                       // session window
+                        (!remoteSessionLog ? string.Empty : " /myrtille-log") +                                                     // session log
+                        " /w:" + clientWidth +                                                                                      // display width
+                        " /h:" + clientHeight;                                                                                      // display height
+                }
+
+                #endregion
 
                 if (!Environment.UserInteractive)
                 {
@@ -216,20 +259,20 @@ namespace Myrtille.Services
             }
             catch (Exception exc)
             {
-                Trace.TraceError("Failed to start rdp client process, remote session {0} ({1})", _remoteSessionId, exc);
+                Trace.TraceError("Failed to start the host client process, remote session {0} ({1})", _remoteSessionId, exc);
             }
         }
 
         public void StopProcess()
         {
-            // after closing the client, the rdp session does remains active on the server and is resumed on a subsequent connection of the same user...
-            // to avoid this, we set the rdp session disconnect timeout to a low value (ie: 1 sec)
+            // RDP: after closing the client, the remote session remains active on the server and is resumed on a subsequent connection of the same user...
+            // to avoid this, set the rdp session disconnect timeout to a low value (ie: 1 sec)
             // it can be done in the registry: HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp, "MaxDisconnectionTime" (DWORD, value in msecs)
             // see http://ts.veranoest.net/ts_faq_configuration.htm
 
             if (_process != null && !_process.HasExited)
             {
-                Trace.TraceInformation("Stopping (kill) rdp client process, remote session {0}", _remoteSessionId);
+                Trace.TraceInformation("Stopping (kill) the host client process, remote session {0}", _remoteSessionId);
 
                 try
                 {
@@ -237,7 +280,7 @@ namespace Myrtille.Services
                 }
                 catch (Exception exc)
                 {
-                    Trace.TraceError("Failed to stop (kill) rdp client process, remote session {0} ({1})", _remoteSessionId, exc);
+                    Trace.TraceError("Failed to stop (kill) the host client process, remote session {0} ({1})", _remoteSessionId, exc);
                 }
             }
         }
@@ -248,7 +291,7 @@ namespace Myrtille.Services
         }
 
         /// <summary>
-        /// the rdp client process has exited
+        /// the host client process has exited
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
@@ -265,6 +308,11 @@ namespace Myrtille.Services
             // also interesting to note, it's possible to set a MaxConnectionTime for the rdp session (registry: HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp, "MaxConnectionTime" (DWORD, value in msecs))
             // an alternative to alter the registry directly (which impact the whole server) is to define group policies strategies (GPOs) into the Active Directory; it's a bit more complicated to handle, but proper...
 
+            // ssh session close cases:
+            // > user clicks the "Disconnect" button
+            // > user enters the "exit" shell command
+            // > the ssh session is disconnected/closed/lost for any reason (invalid credentials, idle timeout, connection lost, etc.)
+
             if (_process != null && _process.HasExited)
             {
                 Trace.TraceInformation("Disconnected remote session {0}, exit code {1}", _remoteSessionId, _process.ExitCode);
@@ -276,7 +324,7 @@ namespace Myrtille.Services
                 }
                 catch (Exception exc)
                 {
-                    Trace.TraceError("Failed to notify rdp client process exit (MyrtilleAppPool down?), remote session {0} ({1})", _remoteSessionId, exc);
+                    Trace.TraceError("Failed to notify the host client process exit (MyrtilleAppPool down?), remote session {0} ({1})", _remoteSessionId, exc);
                 }
                 finally
                 {

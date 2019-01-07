@@ -17,7 +17,8 @@
 */
 
 using System;
-using System.Web;
+using System.Collections;
+using System.Collections.Generic;
 using System.Web.UI;
 
 namespace Myrtille.Web
@@ -25,7 +26,7 @@ namespace Myrtille.Web
     public partial class SendInputs : Page
     {
         /// <summary>
-        /// send user input(s) (mouse, keyboard) to the rdp session
+        /// send user input(s) (mouse, keyboard) to the remote session
         /// if long-polling is disabled (xhr only), also returns image data within the response
         /// </summary>
         /// <param name="sender"></param>
@@ -41,79 +42,121 @@ namespace Myrtille.Web
 
             try
             {
-                if (HttpContext.Current.Session[HttpSessionStateVariables.RemoteSession.ToString()] == null)
+                if (Session[HttpSessionStateVariables.RemoteSession.ToString()] == null)
                     throw new NullReferenceException();
 
                 // retrieve the remote session for the current http session
-                remoteSession = (RemoteSession)HttpContext.Current.Session[HttpSessionStateVariables.RemoteSession.ToString()];
-            }
-            catch (Exception exc)
-            {
-                System.Diagnostics.Trace.TraceError("Failed to retrieve the remote session for the http session {0}, ({1})", HttpContext.Current.Session.SessionID, exc);
-                return;
-            }
+                remoteSession = (RemoteSession)Session[HttpSessionStateVariables.RemoteSession.ToString()];
 
-            try
-            {
-                // retrieve params
-                var data = HttpContext.Current.Request.QueryString["data"];
-                var imgIdx = int.Parse(HttpContext.Current.Request.QueryString["imgIdx"]);
-                var imgReturn = int.Parse(HttpContext.Current.Request.QueryString["imgReturn"]) == 1;
-
-                // process input(s)
-                if (!string.IsNullOrEmpty(data))
+                try
                 {
-                    remoteSession.Manager.ProcessInputs(data);
-                }
+                    // retrieve params
+                    var data = Request.QueryString["data"];
+                    var imgIdx = int.Parse(Request.QueryString["imgIdx"]);
+                    var imgReturn = int.Parse(Request.QueryString["imgReturn"]) == 1;
 
-                // xhr only
-                if (imgReturn)
-                {
-                    // reload page
-                    if (remoteSession.Manager.ReloadPage)
+                    // process input(s)
+                    if (!string.IsNullOrEmpty(data))
                     {
-                        HttpContext.Current.Response.Write("reload");
-                        remoteSession.Manager.ReloadPage = false;
+                        remoteSession.Manager.ProcessInputs(Session, data);
                     }
-                    // remote clipboard
-                    else if (remoteSession.Manager.ClipboardAvailable)
+
+                    // xhr only
+                    if (imgReturn)
                     {
-                        HttpContext.Current.Response.Write(string.Format("clipboard|{0}", remoteSession.Manager.ClipboardText));
-                        remoteSession.Manager.ClipboardAvailable = false;
-                    }
-                    // disconnected session
-                    else if (remoteSession.State == RemoteSessionState.Disconnected)
-                    {
-                        HttpContext.Current.Response.Write("disconnected");
-                    }
-                    // next image
-                    else
-                    {
-                        var image = remoteSession.Manager.GetNextUpdate(imgIdx);
-                        if (image != null)
+                        // disconnected session
+                        if (remoteSession.State == RemoteSessionState.Disconnected)
                         {
-                            System.Diagnostics.Trace.TraceInformation("Returning image {0} ({1}), remote session {2}", image.Idx, (image.Fullscreen ? "screen" : "region"), remoteSession.Id);
+                            Response.Write("disconnected");
+                            return;
+                        }
 
-                            var imgData =
-                                image.Idx + "," +
-                                image.PosX + "," +
-                                image.PosY + "," +
-                                image.Width + "," +
-                                image.Height + "," +
-                                image.Format.ToString().ToLower() + "," +
-                                image.Quality + "," +
-                                image.Fullscreen.ToString().ToLower() + "," +
-                                Convert.ToBase64String(image.Data);
+                        // message queue
+                        List<RemoteSessionMessage> messageQueue = null;
+                        lock (remoteSession.Manager.MessageQueues.SyncRoot)
+                        {
+                            if (!remoteSession.Manager.MessageQueues.ContainsKey(Session.SessionID))
+                            {
+                                remoteSession.Manager.MessageQueues.Add(Session.SessionID, new List<RemoteSessionMessage>());
+                            }
+                            messageQueue = (List<RemoteSessionMessage>)remoteSession.Manager.MessageQueues[Session.SessionID];
+                        }
 
-                            // write the output
-                            HttpContext.Current.Response.Write(imgData);
+                        // concatenate text for terminal output to avoid a slow rendering
+                        // if another message type is in the queue, it will be given priority over the terminal
+                        // the terminal is refreshed often, so it shouldn't be an issue...
+                        var msgText = string.Empty;
+                        var msgComplete = false;
+
+                        while (messageQueue.Count > 0 && !msgComplete)
+                        {
+                            var message = messageQueue[0];
+
+                            switch (message.Type)
+                            {
+                                case MessageType.PageReload:
+                                    msgText = "reload";
+                                    msgComplete = true;
+                                    break;
+
+                                case MessageType.RemoteClipboard:
+                                    msgText = string.Format("clipboard|{0}", message.Text);
+                                    msgComplete = true;
+                                    break;
+
+                                case MessageType.TerminalOutput:
+                                    msgText += string.IsNullOrEmpty(msgText) ? string.Format("term|{0}", message.Text) : message.Text;
+                                    break;
+
+                                case MessageType.PrintJob:
+                                    msgText = string.Format("printjob|{0}", message.Text);
+                                    msgComplete = true;
+                                    break;
+                            }
+
+                            lock (((ICollection)messageQueue).SyncRoot)
+                            {
+                                messageQueue.RemoveAt(0);
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(msgText))
+                        {
+                            Response.Write(msgText);
+                        }
+                        // next update
+                        else
+                        {
+                            var image = remoteSession.Manager.GetNextUpdate(imgIdx);
+                            if (image != null)
+                            {
+                                System.Diagnostics.Trace.TraceInformation("Returning image {0} ({1}), remote session {2}", image.Idx, (image.Fullscreen ? "screen" : "region"), remoteSession.Id);
+
+                                var imgData =
+                                    image.Idx + "," +
+                                    image.PosX + "," +
+                                    image.PosY + "," +
+                                    image.Width + "," +
+                                    image.Height + "," +
+                                    image.Format.ToString().ToLower() + "," +
+                                    image.Quality + "," +
+                                    image.Fullscreen.ToString().ToLower() + "," +
+                                    Convert.ToBase64String(image.Data);
+
+                                // write the output
+                                Response.Write(imgData);
+                            }
                         }
                     }
                 }
+                catch (Exception exc)
+                {
+                    System.Diagnostics.Trace.TraceError("Failed to send user input(s), remote session {0} ({1})", remoteSession.Id, exc);
+                }
             }
             catch (Exception exc)
             {
-                System.Diagnostics.Trace.TraceError("Failed to send user input(s), remote session {0} ({1})", remoteSession.Id, exc);
+                System.Diagnostics.Trace.TraceError("Failed to retrieve the active remote session ({0})", exc);
             }
         }
     }

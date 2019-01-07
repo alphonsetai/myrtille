@@ -28,7 +28,7 @@
         <link rel="stylesheet" type="text/css" href="../css/Default.css"/>
 	</head>    
 
-    <body>
+    <body onload="selectText();">
         
         <form method="post" runat="server">
             
@@ -53,12 +53,27 @@
                     <textarea runat="server" id="sessionUrl" readonly="readonly" rows="4" cols="50"></textarea>
                     <span><h5>Copy the URL and use how required; it can only be used once</h5></span>
                 </div>
+
                 <div class="editHostSessionPopupInput">
                     <input type="button" id="closePopupButton" value="Close" onclick="parent.closePopup();"/>
                 </div>
             </div>
 
         </form>
+
+		<script type="text/javascript" language="javascript" defer="defer">
+
+		    function selectText()
+		    {
+		        var sessionUrl = document.getElementById('sessionUrl');
+		        if (sessionUrl != null)
+                {
+		            sessionUrl.focus();
+		            sessionUrl.select();
+                }
+            }
+
+		</script>
 
 	</body>
 

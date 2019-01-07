@@ -32,7 +32,7 @@
         
         <form method="post" runat="server">
             
-            <!-- upload/download file(s). only enabled if the connected server is localhost or if a domain is specified (so file(s) can be accessed within the rdp session) -->
+            <!-- upload/download file(s). only enabled if the connected server is localhost or if a domain is specified (so file(s) can be accessed within the remote session) -->
             <div>
                 <span id="fileStoragePopupDesc">Files into "My documents" folder</span><hr/>
                 Upload file: <input type="file" runat="server" id="fileToUploadText" onchange="onFileToUploadChange(this);"/>

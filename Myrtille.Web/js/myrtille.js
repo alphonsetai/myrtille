@@ -20,7 +20,7 @@
 /*** Main                                                                                                                                                                                          ***/
 /*****************************************************************************************************************************************************************************************************/
 
-function Myrtille(httpServerUrl, statEnabled, debugEnabled, compatibilityMode, scaleDisplay, displayWidth, displayHeight)
+function Myrtille(httpServerUrl, statEnabled, debugEnabled, compatibilityMode, scaleDisplay, displayWidth, displayHeight, hostType)
 {
     var config = null;
     this.getConfig = function() { return config; };
@@ -41,7 +41,7 @@ function Myrtille(httpServerUrl, statEnabled, debugEnabled, compatibilityMode, s
     {
         try
         {
-            config = new Config(httpServerUrl, statEnabled, debugEnabled, compatibilityMode, scaleDisplay, displayWidth, displayHeight);
+            config = new Config(httpServerUrl, statEnabled, debugEnabled, compatibilityMode, scaleDisplay, displayWidth, displayHeight, hostType);
             
             dialog = new Dialog(config);
             
@@ -77,7 +77,7 @@ this.getConfig = function() { return config; };
 
 var fullscreenPending = false;
 
-function startMyrtille(remoteSessionActive, statEnabled, debugEnabled, compatibilityMode, scaleDisplay, displayWidth, displayHeight)
+function startMyrtille(remoteSessionActive, statEnabled, debugEnabled, compatibilityMode, scaleDisplay, displayWidth, displayHeight, hostType)
 {
     try
     {
@@ -107,7 +107,7 @@ function startMyrtille(remoteSessionActive, statEnabled, debugEnabled, compatibi
         var httpServerUrl = window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : '') + '/' + pathname + '/';
         //alert('http server url: ' + httpServerUrl);
 
-        myrtille = new Myrtille(httpServerUrl, statEnabled, debugEnabled, compatibilityMode, scaleDisplay, displayWidth, displayHeight);
+        myrtille = new Myrtille(httpServerUrl, statEnabled, debugEnabled, compatibilityMode, scaleDisplay, displayWidth, displayHeight, hostType);
         myrtille.init();
 
         // code shortcuts
@@ -128,9 +128,9 @@ this.pushImage = function(idx, posX, posY, width, height, format, quality, fulls
 {
     try
     {
-        if (config.additionalLatency > 0)
+        if (config.getAdditionalLatency() > 0)
         {
-            window.setTimeout(function() { processImage(idx, posX, posY, width, height, format, quality, fullscreen, base64Data); }, Math.round(config.additionalLatency / 2));
+            window.setTimeout(function() { processImage(idx, posX, posY, width, height, format, quality, fullscreen, base64Data); }, Math.round(config.getAdditionalLatency() / 2));
         }
         else
         {
@@ -165,7 +165,7 @@ function processImage(idx, posX, posY, width, height, format, quality, fullscree
         {
             //dialog.showDebug('reached a reasonable number of divs, requesting a fullscreen update');
             fullscreenPending = true;
-            network.send(network.getCommandEnum().REQUEST_FULLSCREEN_UPDATE.text);
+            network.send(network.getCommandEnum().REQUEST_FULLSCREEN_UPDATE.text + 'cleanup');
         }
     }
     catch (exc)
@@ -244,6 +244,19 @@ function toggleRightClick(button)
     }
 }
 
+function toggleVerticalSwipe(button)
+{
+    try
+    {
+        // client side only; no need to persist the button state over the session (page reload = reset the toggle button)
+        user.toggleVerticalSwipe(button);
+    }
+    catch (exc)
+    {
+        dialog.showDebug('myrtille toggleVerticalSwipe error: ' + exc.message);
+    }
+}
+
 function requestRemoteClipboard()
 {
     try
@@ -265,20 +278,28 @@ this.sendText = function(text)
         if (text == null || text == '')
             return;
 
-        if (config.getAdaptiveFullscreenTimeout() > 0)
-            user.triggerActivity();
+        user.triggerActivity();
 
         var keys = new Array();
         for (var i = 0; i < text.length; i++)
         {
-            var charCode = text.charCodeAt(i);
-            //dialog.showDebug('sending charCode: ' + charCode);
+            if (config.getHostType() == config.getHostTypeEnum().RDP)
+            {
+                var charCode = text.charCodeAt(i);
+                //dialog.showDebug('sending charCode: ' + charCode);
                     
-            if (charCode == 10)     // LF
-                charCode = 13;      // CR
+                if (charCode == 10)     // LF
+                    charCode = 13;      // CR
 
-            keys.push((charCode == 13 ? network.getCommandEnum().SEND_KEY_SCANCODE.text : network.getCommandEnum().SEND_KEY_UNICODE.text) + charCode + '-1');
-            keys.push((charCode == 13 ? network.getCommandEnum().SEND_KEY_SCANCODE.text : network.getCommandEnum().SEND_KEY_UNICODE.text) + charCode + '-0');
+                keys.push((charCode == 13 ? network.getCommandEnum().SEND_KEY_SCANCODE.text : network.getCommandEnum().SEND_KEY_UNICODE.text) + charCode + '-1');
+                keys.push((charCode == 13 ? network.getCommandEnum().SEND_KEY_SCANCODE.text : network.getCommandEnum().SEND_KEY_UNICODE.text) + charCode + '-0');
+            }
+            else
+            {
+                var char = text.charAt(i);
+                //dialog.showDebug('sending char: ' + char);
+                keys.push(network.getCommandEnum().SEND_KEY_UNICODE.text + char);
+            }
         }
 
         if (keys.length > 0)
@@ -299,8 +320,7 @@ function sendKey(keyCode, release)
         if (keyCode == null || keyCode == '')
             return;
 
-        if (config.getAdaptiveFullscreenTimeout() > 0)
-            user.triggerActivity();
+        user.triggerActivity();
 
         var keys = new Array();
                 
@@ -349,14 +369,17 @@ function sendCtrlAltDel()
 
 function handleRemoteSessionExit(exitCode)
 {
+    // success
     if (exitCode == 0)
         return;
 
     switch (exitCode)
     {
-        // wfreerdp.exe process killed
+        // host client process killed
+        case -1:
+        // host client process killed from task manager
         case 1:
-            alert('The remote connection was disconnected after the wfreerdp.exe process was killed');
+            alert('The remote connection was disconnected after the host client process was killed');
             break;
 
         // session disconnect from admin console
@@ -389,11 +412,11 @@ function handleRemoteSessionExit(exitCode)
             //alert('The remote connection was logged out from windows menu');
             break;
 
-        // invalid server
+        // invalid server address
         case 131077:
-        // unreachable server
+        // invalid security protocol
         case 131084:
-            alert('The remote connection failed due to invalid or unreachable server address');
+            alert('The remote connection failed due to invalid server address or security protocol');
             break;
 
         // missing username
@@ -407,5 +430,69 @@ function handleRemoteSessionExit(exitCode)
 
         default:
             alert('The remote connection failed or was closed unexpectedly');
+    }
+}
+
+var pdf = null;
+var pdfName = null;
+var pdfLoad = false;
+
+this.downloadPdf = function(name)
+{
+    try
+    {
+        //alert('creating iframe to download pdf: ' + name);
+
+        pdfName = name;
+        pdfLoad = false;
+
+        pdf = document.createElement('iframe');
+
+        pdf.onload = this.printPdf;
+
+        pdf.style.width = '0px';
+        pdf.style.height = '0px';
+        pdf.frameBorder = 0;
+
+        document.body.appendChild(pdf);
+    }
+	catch (exc)
+	{
+        alert('myrtille downloadPdf error: ' + exc.message);
+	}
+}
+
+this.printPdf = function()
+{
+    try
+    {
+        if (!pdfLoad)
+        {
+            pdfLoad = true;
+            // issue with firefox when using inline content disposition (erroneous cross-origin security message when using pdf.js internal resource?!); using attachment instead
+            pdf.src = config.getHttpServerUrl() + 'PrintDocument.aspx?name=' + pdfName + '&disposition=' + (display.isFirefoxBrowser() ? 'attachment' : 'inline');
+        }
+        else
+        {
+            pdf.focus();
+            pdf.contentWindow.print();
+        }
+    }
+	catch (exc)
+	{
+        alert('myrtille printPdf error: ' + exc.message);
+	}
+}
+
+this.writeTerminal = function(data)
+{
+    try
+    {
+        //alert('writing terminal data: ' + data);
+        display.getTerminalDiv().writeTerminal(data);
+    }
+    catch (exc)
+    {
+        alert('myrtille writeTerminal error: ' + exc.message);
     }
 }

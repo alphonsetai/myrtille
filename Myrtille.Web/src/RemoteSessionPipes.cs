@@ -21,6 +21,7 @@ using System.Diagnostics;
 using System.IO.Pipes;
 using System.Security.AccessControl;
 using Myrtille.Helpers;
+using Myrtille.Services.Contracts;
 
 namespace Myrtille.Web
 {
@@ -30,6 +31,11 @@ namespace Myrtille.Web
 
         // it's possible to have 2 ways pipes (duplex, using overlapped I/O), but it proven difficult to setup and raised concurrency access issues...
         // to keep things simple, using separate pipes...
+
+        // TODO: the updates pipe is currently handling both text messages and raw images
+        // even if it's ok (with a strict data format), there might be a need for a separate messages pipe
+        // same thing for audio, if implemented
+
         private NamedPipeServerStream _inputsPipe;
         public NamedPipeServerStream InputsPipe { get { return _inputsPipe; } }
 
@@ -42,7 +48,7 @@ namespace Myrtille.Web
         public RemoteSessionPipes(RemoteSession remoteSession)
         {
             RemoteSession = remoteSession;
-        }
+        }        
 
         public void CreatePipes()
         {
@@ -53,7 +59,7 @@ namespace Myrtille.Web
 
                 // set the pipes access rights
                 var pipeSecurity = new PipeSecurity();
-                var pipeAccessRule = new PipeAccessRule(RemoteSession.Manager.Client.GetProcessIdentity(), PipeAccessRights.FullControl, AccessControlType.Allow);
+                var pipeAccessRule = new PipeAccessRule(RemoteSession.Manager.HostClient.GetProcessIdentity(), PipeAccessRights.FullControl, AccessControlType.Allow);
                 pipeSecurity.AddAccessRule(pipeAccessRule);
 
                 // create the pipes
@@ -61,7 +67,7 @@ namespace Myrtille.Web
                     "remotesession_" + RemoteSession.Id + "_inputs",
                     PipeDirection.InOut,
                     1,
-                    PipeTransmissionMode.Byte,
+                    RemoteSession.HostType == HostTypeEnum.RDP ? PipeTransmissionMode.Byte : PipeTransmissionMode.Message,
                     PipeOptions.Asynchronous,
                     0,
                     0,
@@ -71,7 +77,7 @@ namespace Myrtille.Web
                     "remotesession_" + RemoteSession.Id + "_updates",
                     PipeDirection.InOut,
                     1,
-                    PipeTransmissionMode.Byte,
+                    RemoteSession.HostType == HostTypeEnum.RDP ? PipeTransmissionMode.Byte : PipeTransmissionMode.Message,
                     PipeOptions.Asynchronous,
                     0,
                     0,
@@ -103,12 +109,23 @@ namespace Myrtille.Web
 
                     // send connection settings
                     RemoteSession.Manager.SendCommand(RemoteSessionCommand.SendServerAddress, string.IsNullOrEmpty(RemoteSession.ServerAddress) ? "localhost" : RemoteSession.ServerAddress);
-                    RemoteSession.Manager.SendCommand(RemoteSessionCommand.SendUserDomain, RemoteSession.UserDomain);
-                    RemoteSession.Manager.SendCommand(RemoteSessionCommand.SendUserName, RemoteSession.UserName);
-                    RemoteSession.Manager.SendCommand(RemoteSessionCommand.SendUserPassword, RemoteSession.UserPassword);
-                    RemoteSession.Manager.SendCommand(RemoteSessionCommand.SendStartProgram, RemoteSession.StartProgram);
 
-                    // send client settings, if defined (they will be otherwise send later by the client)
+                    if (!string.IsNullOrEmpty(RemoteSession.VMGuid))
+                        RemoteSession.Manager.SendCommand(RemoteSessionCommand.SendVMGuid, string.Concat(RemoteSession.VMGuid, string.Format(";EnhancedMode={0}", RemoteSession.VMEnhancedMode ? "1" : "0")));
+
+                    if (!string.IsNullOrEmpty(RemoteSession.UserDomain))
+                        RemoteSession.Manager.SendCommand(RemoteSessionCommand.SendUserDomain, RemoteSession.UserDomain);
+
+                    if (!string.IsNullOrEmpty(RemoteSession.UserName))
+                        RemoteSession.Manager.SendCommand(RemoteSessionCommand.SendUserName, RemoteSession.UserName);
+
+                    if (!string.IsNullOrEmpty(RemoteSession.UserPassword))
+                        RemoteSession.Manager.SendCommand(RemoteSessionCommand.SendUserPassword, RemoteSession.UserPassword);
+
+                    if (!string.IsNullOrEmpty(RemoteSession.StartProgram))
+                        RemoteSession.Manager.SendCommand(RemoteSessionCommand.SendStartProgram, RemoteSession.StartProgram);
+
+                    // send browser settings, if defined (they will be otherwise send later by the browser)
                     if (RemoteSession.ImageEncoding.HasValue)
                         RemoteSession.Manager.SendCommand(RemoteSessionCommand.SetImageEncoding, ((int)RemoteSession.ImageEncoding).ToString());
 
@@ -118,8 +135,8 @@ namespace Myrtille.Web
                     if (RemoteSession.ImageQuantity.HasValue)
                         RemoteSession.Manager.SendCommand(RemoteSessionCommand.SetImageQuantity, RemoteSession.ImageQuantity.ToString());
 
-                    // connect; a fullscreen update will be sent upon connection
-                    RemoteSession.Manager.SendCommand(RemoteSessionCommand.ConnectRdpClient);
+                    // connect the host client to the remote host; a fullscreen update will be sent upon connection
+                    RemoteSession.Manager.SendCommand(RemoteSessionCommand.ConnectClient);
                 }
             }
             catch (Exception exc)
@@ -162,7 +179,7 @@ namespace Myrtille.Web
                 Trace.TraceError("Failed to read updates pipe, remote session {0} ({1})", RemoteSession.Id, exc);
 
                 // there is a problem with the updates pipe, close the remote session in order to avoid it being stuck
-                RemoteSession.Manager.SendCommand(RemoteSessionCommand.CloseRdpClient);
+                RemoteSession.Manager.SendCommand(RemoteSessionCommand.CloseClient);
             }
         }
 

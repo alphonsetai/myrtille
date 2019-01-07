@@ -17,7 +17,6 @@
 */
 
 using System;
-using System.Web;
 using System.Web.UI;
 
 namespace Myrtille.Web
@@ -25,7 +24,7 @@ namespace Myrtille.Web
     public partial class GetUpdate : Page
     {
         /// <summary>
-        /// retrieve an image update (region or fullscreen) from the rdp session and send it to the browser
+        /// retrieve an image update (region or fullscreen) from the remote session and send it to the browser
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
@@ -40,42 +39,34 @@ namespace Myrtille.Web
 
             try
             {
-                if (HttpContext.Current.Session[HttpSessionStateVariables.RemoteSession.ToString()] == null)
+                if (Session[HttpSessionStateVariables.RemoteSession.ToString()] == null)
                     throw new NullReferenceException();
 
                 // retrieve the remote session for the current http session
-                remoteSession = (RemoteSession)HttpContext.Current.Session[HttpSessionStateVariables.RemoteSession.ToString()];
-            }
-            catch (Exception exc)
-            {
-                System.Diagnostics.Trace.TraceError("Failed to retrieve the remote session for the http session {0}, ({1})", HttpContext.Current.Session.SessionID, exc);
-                return;
-            }
+                remoteSession = (RemoteSession)Session[HttpSessionStateVariables.RemoteSession.ToString()];
 
-            try
-            {
-                // retrieve params
-                var imgIdx = int.Parse(HttpContext.Current.Request.QueryString["imgIdx"]);
-
-                // retrieve image data
-                var img = remoteSession.Manager.GetCachedUpdate(imgIdx);
-
-                // if the image isn't available (removed from cache?), request a fullscreen update (resync display)
-                if (img == null)
+                try
                 {
-                    remoteSession.Manager.SendCommand(RemoteSessionCommand.RequestFullscreenUpdate);
+                    // retrieve params
+                    var imgIdx = int.Parse(Request.QueryString["imgIdx"]);
+
+                    // retrieve image data
+                    var img = remoteSession.Manager.GetCachedUpdate(imgIdx);
+                    var imgData = img != null ? img.Data : null;
+                    if (imgData != null && imgData.Length > 0)
+                    {
+                        // write the output
+                        Response.OutputStream.Write(imgData, 0, imgData.Length);
+                    }
                 }
-
-                var imgData = img != null ? img.Data : null;
-                if (imgData != null && imgData.Length > 0)
+                catch (Exception exc)
                 {
-                    // write the output
-                    HttpContext.Current.Response.OutputStream.Write(imgData, 0, imgData.Length);
+                    System.Diagnostics.Trace.TraceError("Failed to retrieve display update, remote session {0} ({1})", remoteSession.Id, exc);
                 }
             }
             catch (Exception exc)
             {
-                System.Diagnostics.Trace.TraceError("Failed to get display update, remote session {0} ({1})", remoteSession.Id, exc);
+                System.Diagnostics.Trace.TraceError("Failed to retrieve the active remote session ({0})", exc);
             }
         }
     }

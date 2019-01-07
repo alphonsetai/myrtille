@@ -112,33 +112,100 @@ function Touchscreen(config, dialog, display, network, user)
                 return false;
             }
 
-            // sampling (same mechanism as mouse)
-            touchMoveCount++;
-            var send = true;
-            if (config.getMouseMoveSamplingRate() == 5 ||
-                config.getMouseMoveSamplingRate() == 10 ||
-                config.getMouseMoveSamplingRate() == 20 ||
-                config.getMouseMoveSamplingRate() == 25 ||
-                config.getMouseMoveSamplingRate() == 50)
+            // detect gestures (simple swipe for now, may evolve into more advanced gestures)
+            var gesture = false;
+            var xDiff;
+            var yDiff;
+
+            if (user.getVerticalSwipeEnabled())
             {
-                send = touchMoveCount % (100 / config.getMouseMoveSamplingRate()) == 0;
+                xDiff = lastTouchX - touchX;
+                yDiff = lastTouchY - touchY;
+
+                // horizontal move is more significant than vertical
+                if (Math.abs(xDiff) > Math.abs(yDiff))
+                {
+                    if (xDiff > 0)
+                    {
+                        //dialog.showDebug('left swipe');
+                    }
+                    else
+                    {
+                        //dialog.showDebug('right swipe');
+                    }
+                }
+                else
+                {
+                    if (yDiff > 0)
+                    {
+                        //dialog.showDebug('up swipe');
+                    }
+                    else
+                    {
+                        //dialog.showDebug('down swipe');
+                    }
+
+                    // handle gestures
+                    gesture = true;
+                }
             }
 
-            // sampling debug: display a dot at the current touch move position (green: move sent, red: dropped) - only if canvas is enabled
-            /*
-            if (config.getDebugEnabled() && config.getDisplayMode() == config.getDisplayModeEnum().CANVAS)
+            if (!gesture)
             {
-                display.getCanvas().getCanvasContext().fillStyle = send ? '#00FF00' : '#FF0000';
-                display.getCanvas().getCanvasContext().fillRect(touchX, touchY, 1, 1);
-            }
-            */
+                // sampling (same mechanism as mouse)
+                touchMoveCount++;
+                var send = true;
+                if (config.getMouseMoveSamplingRate() == 5 ||
+                    config.getMouseMoveSamplingRate() == 10 ||
+                    config.getMouseMoveSamplingRate() == 20 ||
+                    config.getMouseMoveSamplingRate() == 25 ||
+                    config.getMouseMoveSamplingRate() == 50)
+                {
+                    send = touchMoveCount % (100 / config.getMouseMoveSamplingRate()) == 0;
+                }
 
-            if (send)
-            {
-                if (config.getAdaptiveFullscreenTimeout() > 0)
+                // sampling debug: display a dot at the current touch move position (green: move sent, red: dropped) - only if canvas is enabled
+                /*
+                if (config.getDebugEnabled() && config.getDisplayMode() == config.getDisplayModeEnum().CANVAS)
+                {
+                    display.getCanvas().getCanvasContext().fillStyle = send ? '#00FF00' : '#FF0000';
+                    display.getCanvas().getCanvasContext().fillRect(touchX, touchY, 1, 1);
+                }
+                */
+
+                if (send)
+                {
                     user.triggerActivity();
+                    sendEvent(network.getCommandEnum().SEND_MOUSE_MOVE.text + touchX + '-' + touchY);  // same event as mouse move
+                }
+            }
+            else
+            {
+                user.triggerActivity();
 
-                sendEvent(network.getCommandEnum().SEND_MOUSE_MOVE.text + touchX + '-' + touchY);  // same event as mouse move
+                // cancel the touch tap preceding the gesture
+                // replace it by a touch move to set the gesture initial position
+                if (touchTapTimeout != null)
+                {
+                    //dialog.showDebug('cancelling touch tap');
+                    window.clearTimeout(touchTapTimeout);
+                    touchTapTimeout = null;
+                    touchTapCancelled = true;
+                    sendEvent(network.getCommandEnum().SEND_MOUSE_MOVE.text + lastTouchTapX + '-' + lastTouchTapY);
+                }
+                else
+                {
+                    if (yDiff > 0)
+                    {
+                        // scroll down
+                        sendEvent(network.getCommandEnum().SEND_MOUSE_WHEEL_DOWN.text + lastTouchTapX + '-' + lastTouchTapY);
+                    }
+                    else
+                    {
+                        // scroll up
+                        sendEvent(network.getCommandEnum().SEND_MOUSE_WHEEL_UP.text + lastTouchTapX + '-' + lastTouchTapY);
+                    }
+                }
             }
 
             // update the last touch position
@@ -161,8 +228,11 @@ function Touchscreen(config, dialog, display, network, user)
     // last touch tap position
     var lastTouchTapX = null;
     var lastTouchTapY = null;
-    this.getLastTouchTapX = function () { return lastTouchTapX; };
-    this.getLastTouchTapY = function () { return lastTouchTapY; };
+
+    // wait for a potential gesture following a touch tap
+    // if there is a gesture, the touch tap is cancelled
+    var touchTapTimeout = null;
+    var touchTapCancelled = false;
 
     function touchTap(e, start)
     {
@@ -170,26 +240,35 @@ function Touchscreen(config, dialog, display, network, user)
         {
             //dialog.showDebug('touch tap');
 
+            if (touchTapCancelled)
+            {
+                //dialog.showDebug('touch tap cancelled');
+                touchTapCancelled = false;
+                return false;
+            }
+
             if (!processEvent(e))
                 return false;
 
-            if (config.getAdaptiveFullscreenTimeout() > 0)
+            touchTapTimeout = window.setTimeout(function()
+            {
                 user.triggerActivity();
 
-            //dialog.showDebug('touch ' + (start ? 'start' : 'end'));
-            if (user.getRightClickButton() != null && user.getRightClickButton().value == 'Right-Click ON')
-            {
-                //dialog.showDebug('emulating mouse right click ' + (start ? 'down' : 'up'));
-                sendEvent(network.getCommandEnum().SEND_MOUSE_RIGHT_BUTTON.text + start + touchX + '-' + touchY);
-                if (!start)
+                //dialog.showDebug('touch ' + (start ? 'start' : 'end'));
+                if (user.getRightClickButton() != null && user.getRightClickButton().value == 'Right-Click ON')
                 {
-                    user.toggleRightClick(user.getRightClickButton());
+                    //dialog.showDebug('emulating mouse right click ' + (start ? 'down' : 'up'));
+                    sendEvent(network.getCommandEnum().SEND_MOUSE_RIGHT_BUTTON.text + start + touchX + '-' + touchY);
+                    if (!start)
+                    {
+                        user.toggleRightClick(user.getRightClickButton());
+                    }
                 }
-            }
-            else
-            {
-                sendEvent(network.getCommandEnum().SEND_MOUSE_LEFT_BUTTON.text + start + touchX + '-' + touchY);   // same event as mouse left button
-            }
+                else
+                {
+                    sendEvent(network.getCommandEnum().SEND_MOUSE_LEFT_BUTTON.text + start + touchX + '-' + touchY);   // same event as mouse left button
+                }
+            }, 300);
 
             // update the last touch tap position
             lastTouchTapX = touchX;

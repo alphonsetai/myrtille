@@ -18,7 +18,6 @@
 
 using System;
 using System.Threading;
-using System.Web;
 using System.Web.UI;
 using Myrtille.Services.Contracts;
 
@@ -29,6 +28,7 @@ namespace Myrtille.Web
         private EnterpriseServiceClient _enterpriseClient;
         private EnterpriseSession _enterpriseSession;
         private long? _hostId = null;
+        private HostTypeEnum _hostType;
 
         /// <summary>
         /// page init
@@ -51,53 +51,85 @@ namespace Myrtille.Web
             object sender,
             EventArgs e)
         {
-            // retrieve the active enterprise session, if any
-            if (HttpContext.Current.Session[HttpSessionStateVariables.EnterpriseSession.ToString()] != null)
+            try
             {
+                if (Session[HttpSessionStateVariables.EnterpriseSession.ToString()] == null)
+                    throw new NullReferenceException();
+
+                _enterpriseSession = (EnterpriseSession)Session[HttpSessionStateVariables.EnterpriseSession.ToString()];
+
                 try
                 {
-                    _enterpriseSession = (EnterpriseSession)HttpContext.Current.Session[HttpSessionStateVariables.EnterpriseSession.ToString()];
-                }
-                catch (Exception exc)
-                {
-                    System.Diagnostics.Trace.TraceError("Failed to retrieve the enterprise session for the http session {0}, ({1})", HttpContext.Current.Session.SessionID, exc);
-                }
-            }
-
-            // retrieve the host
-            if (Request["hostId"] != null)
-            {
-                long lResult = 0;
-                if (long.TryParse(Request["hostId"], out lResult))
-                {
-                    _hostId = lResult;
-                }
-
-                if (!IsPostBack && Request["edit"] == null)
-                {
-                    try
+                    if (!_enterpriseSession.IsAdmin)
                     {
-                        var host = _enterpriseClient.GetHost(_hostId.Value, _enterpriseSession.SessionID);
-                        if (host != null)
+                        Response.Redirect("~/", true);
+                    }
+
+                    if (Request["hostType"] == null || !Enum.TryParse(Request["hostType"], out _hostType))
+                    {
+                        _hostType = HostTypeEnum.RDP;
+                    }
+
+                    // retrieve the host, if any (create if empty)
+                    if (Request["hostId"] != null)
+                    {
+                        long hostId;
+                        if (!long.TryParse(Request["hostId"], out hostId))
                         {
-                            hostName.Value = host.HostName;
-                            hostAddress.Value = host.HostAddress;
-                            groupsAccess.Value = host.DirectoryGroups;
-                            securityProtocol.SelectedIndex = (int)host.Protocol;
+                            hostId = 0;
+                        }
+
+                        if (hostId != 0)
+                        {
+                            _hostId = hostId;
+
+                            if (!IsPostBack && Request["edit"] == null)
+                            {
+                                try
+                                {
+                                    var host = _enterpriseClient.GetHost(_hostId.Value, _enterpriseSession.SessionID);
+                                    if (host != null)
+                                    {
+                                        _hostType = host.HostType;
+                                        hostType.Value = _hostType.ToString();
+                                        hostName.Value = host.HostName;
+                                        hostAddress.Value = host.HostAddress;
+                                        vmGuid.Value = host.VMGuid;
+                                        vmEnhancedMode.Checked = host.VMEnhancedMode;
+                                        groupsAccess.Value = host.DirectoryGroups;
+                                        securityProtocol.SelectedIndex = (int)host.Protocol;
+                                        promptCredentials.Checked = host.PromptForCredentials;
+                                        startProgram.Value = host.StartRemoteProgram;
+                                    }
+                                }
+                                catch (Exception exc)
+                                {
+                                    System.Diagnostics.Trace.TraceError("Failed to retrieve host {0}, ({1})", _hostId, exc);
+                                }
+                            }
+
+                            createSessionUrl.Attributes["onclick"] = string.Format("parent.openPopup('editHostSessionPopup', 'EditHostSession.aspx?hostId={0}');", _hostId);
                         }
                     }
-                    catch (Exception exc)
+                    else
                     {
-                        System.Diagnostics.Trace.TraceError("Failed to retrieve host {0}, ({1})", _hostId, exc);
+                        createSessionUrl.Disabled = true;
+                        deleteHost.Disabled = true;
                     }
-                }
 
-                createSessionUrl.Attributes["onclick"] = string.Format("parent.openPopup('editHostSessionPopup', 'EditHostSession.aspx?hostId={0}');", _hostId);
+                    vmGuidInput.Visible = _hostType == HostTypeEnum.RDP;
+                    vmEnhancedModeInput.Visible = _hostType == HostTypeEnum.RDP;
+                    rdpSecurityInput.Visible = _hostType == HostTypeEnum.RDP;
+                    startProgramInput.Visible = _hostType == HostTypeEnum.RDP;
+                }
+                catch (ThreadAbortException)
+                {
+                    // occurs because the response is ended after redirect
+                }
             }
-            else
+            catch (Exception exc)
             {
-                createSessionUrl.Disabled = true;
-                deleteHost.Disabled = true;
+                System.Diagnostics.Trace.TraceError("Failed to retrieve the active enterprise session ({0})", exc);
             }
         }
 
@@ -115,31 +147,31 @@ namespace Myrtille.Web
 
             try
             {
-                if (!_hostId.HasValue)
+                var enterpriseHost = new EnterpriseHostEdit
                 {
-                    _enterpriseClient.AddHost(new EnterpriseHostEdit
-                    {
-                        HostID = 0,
-                        HostName = hostName.Value,
-                        HostAddress = hostAddress.Value,
-                        DirectoryGroups = groupsAccess.Value,
-                        Protocol = (SecurityProtocolEnum)securityProtocol.SelectedIndex
-                    }, _enterpriseSession.SessionID);
+                    HostID = _hostId ?? 0,
+                    HostType = _hostType,
+                    HostName = hostName.Value,
+                    HostAddress = hostAddress.Value,
+                    VMGuid = vmGuid.Value,
+                    VMEnhancedMode = vmEnhancedMode.Checked,
+                    DirectoryGroups = groupsAccess.Value,
+                    Protocol = (SecurityProtocolEnum)securityProtocol.SelectedIndex,
+                    StartRemoteProgram = startProgram.Value,
+                    PromptForCredentials = promptCredentials.Checked
+                };
+
+                if (_hostId != null)
+                {
+                    _enterpriseClient.UpdateHost(enterpriseHost, _enterpriseSession.SessionID);
                 }
                 else
                 {
-                    _enterpriseClient.UpdateHost(new EnterpriseHostEdit
-                    {
-                        HostID = _hostId.Value,
-                        HostName = hostName.Value,
-                        HostAddress = hostAddress.Value,
-                        DirectoryGroups = groupsAccess.Value,
-                        Protocol = (SecurityProtocolEnum)securityProtocol.SelectedIndex
-                    }, _enterpriseSession.SessionID);
+                    _enterpriseClient.AddHost(enterpriseHost, _enterpriseSession.SessionID);
                 }
 
                 // refresh the hosts list
-                Response.Redirect(Request.RawUrl + (Request.RawUrl.Contains("?") ? "&" : "?") + "edit=success");
+                Response.Redirect(Request.RawUrl + (Request.RawUrl.Contains("?") ? "&" : "?") + "edit=success" + (_hostId != null ? string.Format("&hostType={0}", _hostType) : string.Empty));
             }
             catch (ThreadAbortException)
             {
@@ -168,7 +200,11 @@ namespace Myrtille.Web
                 _enterpriseClient.DeleteHost(_hostId.Value, _enterpriseSession.SessionID);
 
                 // refresh the hosts list
-                Response.Redirect(Request.RawUrl + (Request.RawUrl.Contains("?") ? "&" : "?") + "edit=success");
+                Response.Redirect(Request.RawUrl + (Request.RawUrl.Contains("?") ? "&" : "?") + "edit=success" + string.Format("&hostType={0}", _hostType));
+            }
+            catch (ThreadAbortException)
+            {
+                // occurs because the response is ended after redirect
             }
             catch (Exception exc)
             {

@@ -17,3 +17,4 @@
 --%>
 
 <%@ Page Language="C#" Inherits="Myrtille.Web.PushUpdates" Codebehind="PushUpdates.aspx.cs" AutoEventWireup="true" Culture="auto" UICulture="auto" EnableSessionState="ReadOnly" %>
+<%@ OutputCache Location="None" %>

@@ -16,6 +16,7 @@
     limitations under the License.
 */
 
+using System.IO;
 using System.Xml;
 using System.Xml.XPath;
 
@@ -125,6 +126,68 @@ namespace Myrtille.Helpers
                 {
                     var theNodeValue = theNode.Attributes["value"];
                     theNodeValue.Value = value;
+                }
+            }
+        }
+
+        public static void CommentConfigKey(
+            XmlDocument document,
+            XmlNode parentNode,
+            string key)
+        {
+            if ((parentNode != null) &&
+                (parentNode.ChildNodes != null) &&
+                (parentNode.ChildNodes.Count > 0))
+            {
+                XmlNode theNode = null;
+
+                foreach (XmlNode node in parentNode.ChildNodes)
+                {
+                    if ((node.Name.ToUpper().Equals("ADD")) &&
+                        (node.Attributes != null) &&
+                        (node.Attributes["key"] != null) &&
+                        (node.Attributes["key"].Value.ToUpper().Equals(key.ToUpper())))
+                    {
+                        theNode = node;
+                        break;
+                    }
+                }
+
+                if (theNode != null)
+                {
+                    var commentContent = theNode.OuterXml;
+                    var commentNode = document.CreateComment(commentContent);
+                    parentNode.ReplaceChild(commentNode, theNode);
+                }
+            }
+        }
+
+        public static void UncommentConfigKey(
+            XmlDocument document,
+            XmlNode parentNode,
+            string key)
+        {
+            if ((parentNode != null) &&
+                (parentNode.ChildNodes != null) &&
+                (parentNode.ChildNodes.Count > 0))
+            {
+                XmlNode theNode = null;
+
+                foreach (XmlNode node in parentNode.ChildNodes)
+                {
+                    if ((node is XmlComment) &&
+                        (node.Value.ToUpper().StartsWith(string.Format("<ADD KEY=\"{0}\"", key.ToUpper()))))
+                    {
+                        theNode = node;
+                        break;
+                    }
+                }
+
+                if (theNode != null)
+                {
+                    var nodeReader = XmlReader.Create(new StringReader(theNode.Value));
+                    var uncommentedNode = document.ReadNode(nodeReader);
+                    parentNode.ReplaceChild(uncommentedNode, theNode);
                 }
             }
         }

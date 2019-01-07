@@ -13,6 +13,15 @@ namespace Myrtille.Web {
     public partial class EditHost {
         
         /// <summary>
+        /// hostType control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlInputHidden hostType;
+        
+        /// <summary>
         /// hostName control.
         /// </summary>
         /// <remarks>
@@ -31,6 +40,42 @@ namespace Myrtille.Web {
         protected global::System.Web.UI.HtmlControls.HtmlInputText hostAddress;
         
         /// <summary>
+        /// vmGuidInput control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlGenericControl vmGuidInput;
+        
+        /// <summary>
+        /// vmGuid control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlInputText vmGuid;
+        
+        /// <summary>
+        /// vmEnhancedModeInput control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlGenericControl vmEnhancedModeInput;
+        
+        /// <summary>
+        /// vmEnhancedMode control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlInputCheckBox vmEnhancedMode;
+        
+        /// <summary>
         /// groupsAccess control.
         /// </summary>
         /// <remarks>
@@ -40,6 +85,15 @@ namespace Myrtille.Web {
         protected global::System.Web.UI.HtmlControls.HtmlInputText groupsAccess;
         
         /// <summary>
+        /// rdpSecurityInput control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlGenericControl rdpSecurityInput;
+        
+        /// <summary>
         /// securityProtocol control.
         /// </summary>
         /// <remarks>
@@ -47,6 +101,33 @@ namespace Myrtille.Web {
         /// To modify move field declaration from designer file to code-behind file.
         /// </remarks>
         protected global::System.Web.UI.HtmlControls.HtmlSelect securityProtocol;
+        
+        /// <summary>
+        /// startProgramInput control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlGenericControl startProgramInput;
+        
+        /// <summary>
+        /// startProgram control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlInputText startProgram;
+        
+        /// <summary>
+        /// promptCredentials control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlInputCheckBox promptCredentials;
         
         /// <summary>
         /// createSessionUrl control.

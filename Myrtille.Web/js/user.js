@@ -44,6 +44,10 @@ function User(config, dialog, display, network)
     var rightClickButton = null;
     this.getRightClickButton = function() { return rightClickButton; };
 
+    // swipe up/down gesture management for touchscreen devices
+    var verticalSwipeEnabled = true;
+    this.getVerticalSwipeEnabled = function() { return verticalSwipeEnabled; };
+
     this.init = function()
     {
         try
@@ -72,20 +76,28 @@ function User(config, dialog, display, network)
                 };
             }
 
-            // responsive display
-            eventListener('resize', function() { browserResize(); });
+            if (config.getHostType() == config.getHostTypeEnum().RDP)
+            {
+                // responsive display
+                eventListener('resize', function() { browserResize(); });
 
-            keyboard = new Keyboard(config, dialog, display, network, this);
-            keyboard.init();
+                keyboard = new Keyboard(config, dialog, display, network, this);
+                keyboard.init();
 
-            mouse = new Mouse(config, dialog, display, network, this);
-            mouse.init();
+                mouse = new Mouse(config, dialog, display, network, this);
+                mouse.init();
 
-            // even if possible to detect if the device has touchscreen capabilities, it would only be an assumption; so, implementing it by default, alongside with mouse...
-            // that's anyway the right thing to do, as a device can have both mouse and touchscreen
-            // http://www.stucox.com/blog/you-cant-detect-a-touchscreen/
-            touchscreen = new Touchscreen(config, dialog, display, network, this);
-            touchscreen.init();
+                // even if possible to detect if the device has touchscreen capabilities, it would only be an assumption; so, implementing it by default, alongside with mouse...
+                // that's anyway the right thing to do, as a device can have both mouse and touchscreen
+                // http://www.stucox.com/blog/you-cant-detect-a-touchscreen/
+                touchscreen = new Touchscreen(config, dialog, display, network, this);
+                touchscreen.init();
+            }
+            else
+            {
+                // use xterm input handlers for SSH
+                display.getTerminalDiv().init(network, this);
+            }
         }
         catch (exc)
         {
@@ -105,6 +117,26 @@ function User(config, dialog, display, network)
         catch (exc)
         {
             dialog.showDebug('user toggleRightClick error: ' + exc.message);
+        }
+    };
+
+    this.toggleVerticalSwipe = function(button)
+    {
+        try
+        {
+            if (display.isIEBrowser())
+            {
+                alert('this experimental feature is disabled on IE/Edge');
+                return;
+            }
+
+            verticalSwipeEnabled = !verticalSwipeEnabled;
+            button.value = verticalSwipeEnabled ? 'Swipe up/down ON' : 'Swipe up/down OFF';
+            //dialog.showDebug('toggling ' + button.value);
+        }
+        catch (exc)
+        {
+            dialog.showDebug('user toggleVerticalSwipe error: ' + exc.message);
         }
     };
 
@@ -151,7 +183,7 @@ function User(config, dialog, display, network)
             commands.push(network.getCommandEnum().SEND_BROWSER_RESIZE.text + width + 'x' + height);
 
             //dialog.showDebug('scale fullscreen update');
-            commands.push(network.getCommandEnum().REQUEST_FULLSCREEN_UPDATE.text);
+            commands.push(network.getCommandEnum().REQUEST_FULLSCREEN_UPDATE.text + 'scale');
 
             network.send(commands.toString());
         }
@@ -163,6 +195,9 @@ function User(config, dialog, display, network)
 
     this.triggerActivity = function()
     {
+        if (config.getAdaptiveFullscreenTimeout() == 0)
+            return;
+
         try
         {
             //dialog.showDebug('user activity detected, sliding adaptive fullscreen update');
@@ -176,7 +211,7 @@ function User(config, dialog, display, network)
             adaptiveFullscreenTimeout = window.setTimeout(function()
             {
                 //dialog.showDebug('adaptive fullscreen update');
-                network.send(network.getCommandEnum().REQUEST_FULLSCREEN_UPDATE.text);
+                network.send(network.getCommandEnum().REQUEST_FULLSCREEN_UPDATE.text + 'adaptive');
             },
             config.getAdaptiveFullscreenTimeout());
         }

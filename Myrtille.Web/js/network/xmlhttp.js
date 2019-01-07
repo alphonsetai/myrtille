@@ -107,10 +107,10 @@ function XmlHttp(config, dialog, display, network)
 
             if (xhr != null)
             {
-                // give priority to fullscreen update requests (by design, unbuffered commands for immediate consideration)
-                if (data.indexOf(network.getCommandEnum().REQUEST_FULLSCREEN_UPDATE.text) != -1)
+                // give priority to commands with data over empty polling
+                if (data != null && data != '')
                 {
-                    //dialog.showDebug('xhr fullscreen priority');
+                    //dialog.showDebug('xhr data priority');
                     cleanup(false);
                 }
                 else
@@ -131,7 +131,7 @@ function XmlHttp(config, dialog, display, network)
             xhrStartTime = startTime;
 
             xhr.open('GET', config.getHttpServerUrl() + 'SendInputs.aspx' +
-                '?data=' + (data == null ? '' : data) +
+                '?data=' + (data == null ? '' : encodeURIComponent(data)) +
                 '&imgIdx=' + display.getImgIdx() +
                 '&imgReturn=' + (config.getNetworkMode() == config.getNetworkModeEnum().XHR ? 1 : 0) +
                 '&noCache=' + startTime);
@@ -200,36 +200,46 @@ function XmlHttp(config, dialog, display, network)
 	    }
     }
 
-    function processResponse(xhrResponseText)
+    function processResponse(text)
     {
         try
         {
-            //dialog.showDebug('xhr response:' + xhrResponseText);
+            //dialog.showDebug('xhr response:' + text);
 
             // update the average "latency"
             network.updateLatency(xhrStartTime);
 
-            if (xhrResponseText != '')
+            if (text != '')
             {
                 // reload page
-                if (xhrResponseText == 'reload')
+                if (text == 'reload')
                 {
                     window.location.href = window.location.href;
                 }
-                // remote clipboard
-                else if (xhrResponseText.length >= 10 && xhrResponseText.substr(0, 10) == 'clipboard|')
+                // receive terminal data, send to xtermjs
+                else if (text.length >= 5 && text.substr(0, 5) == "term|")
                 {
-                    showDialogPopup('showDialogPopup', 'ShowDialog.aspx', 'Ctrl+C to copy to local clipboard (Cmd-C on Mac)', xhrResponseText.substr(10, xhrResponseText.length - 10), true);
+                    display.getTerminalDiv().writeTerminal(text.substr(5, text.length - 5));
+                }
+                // remote clipboard
+                else if (text.length >= 10 && text.substr(0, 10) == 'clipboard|')
+                {
+                    showDialogPopup('showDialogPopup', 'ShowDialog.aspx', 'Ctrl+C to copy to local clipboard (Cmd-C on Mac)', text.substr(10, text.length - 10), true);
+                }
+                // print job
+                else if (text.length >= 9 && text.substr(0, 9) == 'printjob|')
+                {
+                    downloadPdf(text.substr(9, text.length - 9));
                 }
                 // disconnected session
-                else if (xhrResponseText == 'disconnected')
+                else if (text == 'disconnected')
                 {
-                    window.location.href = config.getHttpServerUrl() + '?';
+                    window.location.href = config.getHttpServerUrl();
                 }
                 // new image
                 else
                 {
-                    var imgInfo = xhrResponseText.split(',');
+                    var imgInfo = text.split(',');
                         
                     var idx = parseInt(imgInfo[0]);
                     var posX = parseInt(imgInfo[1]);
@@ -272,7 +282,7 @@ function XmlHttp(config, dialog, display, network)
             {
                 //dialog.showDebug('reached a reasonable number of divs, requesting a fullscreen update');
                 fullscreenPending = true;
-                network.send(network.getCommandEnum().REQUEST_FULLSCREEN_UPDATE.text);
+                network.send(network.getCommandEnum().REQUEST_FULLSCREEN_UPDATE.text + 'cleanup');
             }
 	    }
 	    catch (exc)

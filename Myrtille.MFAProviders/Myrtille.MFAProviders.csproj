@@ -31,9 +31,8 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="OASIS.Integration, Version=1.6.1.0, Culture=neutral, PublicKeyToken=0c18c0483c9815ce, processorArchitecture=MSIL">
-      <HintPath>..\packages\OASIS.Integration.1.6.1\lib\OASIS.Integration.dll</HintPath>
-      <Private>True</Private>
+    <Reference Include="OASIS.Integration, Version=1.7.0.0, Culture=neutral, PublicKeyToken=bf7fa19775bc8b36, processorArchitecture=MSIL">
+      <HintPath>..\packages\OASIS.Integration.1.7.0\lib\OASIS.Integration.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.configuration" />
@@ -50,13 +49,13 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\Myrtille.Services.Contracts\Myrtille.Services.Contracts.csproj">
       <Project>{010e1702-3045-4b13-bfb6-06ffc60b5cbb}</Project>
       <Name>Myrtille.Services.Contracts</Name>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

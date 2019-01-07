@@ -31,9 +31,11 @@ namespace Myrtille.Helpers
         /// </summary>
         /// <param name="pipe"></param>
         /// <param name="pipeName"></param>
+        /// <param name="sizeHeader"></param>
         public static byte[] ReadPipeMessage(
             PipeStream pipe,
-            string pipeName)
+            string pipeName,
+            bool sizeHeader = true)
         {
             if (pipe == null)
             {
@@ -51,21 +53,47 @@ namespace Myrtille.Helpers
             {
                 if (pipe.CanRead)
                 {
-                    var memoryStream = new MemoryStream();
-                    var buffer = new byte[4];
-
-                    var bytesRead = 0;
-                    if ((bytesRead = pipe.Read(buffer, 0, 4)) == 4)
+                    using (var memoryStream = new MemoryStream())
                     {
-                        var size = BitConverter.ToInt32(buffer, 0);
-                        buffer = new byte[size];
-                        if ((bytesRead = pipe.Read(buffer, 0, size)) == size)
-                        {
-                            memoryStream.Write(buffer, 0, bytesRead);
-                        }
-                    }
+                        byte[] buffer;
+                        var bytesRead = 0;
 
-                    return memoryStream.ToArray();
+                        if (pipe.TransmissionMode == PipeTransmissionMode.Byte)
+                        {
+                            // the first 4 bytes (int32) contains the size of the data buffer
+                            if (sizeHeader)
+                            {
+                                buffer = new byte[4];
+                                if ((bytesRead = pipe.Read(buffer, 0, 4)) == 4)
+                                {
+                                    var size = BitConverter.ToInt32(buffer, 0);
+                                    buffer = new byte[size];
+                                    if ((bytesRead = pipe.Read(buffer, 0, size)) == size)
+                                    {
+                                        memoryStream.Write(buffer, 0, bytesRead);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                buffer = new byte[4096];
+                                if ((bytesRead = pipe.Read(buffer, 0, buffer.Length)) > 0)
+                                {
+                                    memoryStream.Write(buffer, 0, bytesRead);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            buffer = new byte[4096];
+                            do
+                            {
+                                memoryStream.Write(buffer, 0, pipe.Read(buffer, 0, buffer.Length));
+                            } while (pipe != null && pipe.IsConnected && pipe.CanRead && !pipe.IsMessageComplete);
+                        }
+
+                        return memoryStream.ToArray();
+                    }
                 }
                 else
                 {
@@ -74,7 +102,7 @@ namespace Myrtille.Helpers
             }
             catch (IOException)
             {
-                Trace.TraceError("Failed to read message from pipe {0} (I/O error)", (string.IsNullOrEmpty(pipeName) ? "<unknown>" : pipeName));
+                Trace.TraceWarning("Failed to read message from pipe {0} (I/O error)", (string.IsNullOrEmpty(pipeName) ? "<unknown>" : pipeName));
                 throw;
             }
             catch (Exception exc)
@@ -90,10 +118,12 @@ namespace Myrtille.Helpers
         /// <param name="pipe"></param>
         /// <param name="pipeName"></param>
         /// <param name="message"></param>
+        /// <param name="sizeHeader"></param>
         public static void WritePipeMessage(
             PipeStream pipe,
             string pipeName,
-            string message)
+            string message,
+            bool sizeHeader = false)
         {
             if (pipe == null)
             {
@@ -111,7 +141,22 @@ namespace Myrtille.Helpers
             {
                 if (pipe.CanWrite)
                 {
-                    var buffer = Encoding.UTF8.GetBytes(message);
+                    byte[] buffer;
+
+                    if (sizeHeader)
+                    {
+                        using (var memoryStream = new MemoryStream())
+                        {
+                            memoryStream.Write(BitConverter.GetBytes(message.Length), 0, 4);
+                            memoryStream.Write(Encoding.UTF8.GetBytes(message), 0, message.Length);
+                            buffer = memoryStream.ToArray();
+                        }
+                    }
+                    else
+                    {
+                        buffer = Encoding.UTF8.GetBytes(message);
+                    }
+
                     pipe.Write(buffer, 0, buffer.Length);
                     pipe.Flush();
                 }
@@ -122,7 +167,7 @@ namespace Myrtille.Helpers
             }
             catch (IOException)
             {
-                Trace.TraceError("Failed to write message to pipe {0} (I/O error)", (string.IsNullOrEmpty(pipeName) ? "<unknown>" : pipeName));
+                Trace.TraceWarning("Failed to write message to pipe {0} (I/O error)", (string.IsNullOrEmpty(pipeName) ? "<unknown>" : pipeName));
                 throw;
             }
             catch (Exception exc)

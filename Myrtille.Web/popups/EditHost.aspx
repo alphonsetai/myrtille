@@ -32,6 +32,8 @@
         
         <form method="post" runat="server">
             
+            <input type="hidden" runat="server" id="hostType"/>
+
             <div id="editHostPopupInner">
                 <span id="editHostPopupTitle">
                     <strong>Host Configuration</strong>
@@ -42,23 +44,40 @@
                     <input type="text" runat="server" id="hostName" title="host name" />
                 </div>
                 <div class="editHostPopupInput">
-                    <h5><label id="hostAddressLabel" for="hostAddress">Host address (optional, uses hostname if not specified)</label></h5>
+                    <h5><label id="hostAddressLabel" for="hostAddress">Host address (:port) (optional, uses hostname if not specified)</label></h5>
                     <input type="text" runat="server" id="hostAddress" title="host address" />
+                </div>
+                <div class="editHostPopupInput" runat="server" id="vmGuidInput">
+                    <h5><label id="vmGuidLabel" for="vmGuid">VM GUID (optional, if the guest is an Hyper-V VM)</label></h5>
+                    <input type="text" runat="server" id="vmGuid" title="VM GUID, for direct connection" />
+                </div>
+                <div class="editHostPopupInput" runat="server" id="vmEnhancedModeInput">
+                    <h5><label id="vmEnhancedModeLabel" for="vmEnhancedMode">VM Enhanced Mode (if supported by the VM)</label></h5>
+                    <input type="checkbox" runat="server" id="vmEnhancedMode" title="faster display and clipboard/printer redirection, if supported by the guest VM" />
                 </div>
                 <div class="editHostPopupInput">
                     <h5><label id="groupsAccessLabel" for="groupsAccess">Domain Groups Allowed (comma separated)</label></h5>
                     <input type="text" runat="server" id="groupsAccess" title="groups access"/>
                 </div>
-                <div class="editHostPopupInput">
+                <div class="editHostPopupInput" runat="server" id="rdpSecurityInput">
                     <h5><label id="securityProtocolLabel" for="securityProtocol">RDP Security Protocol</label></h5>
-                    <select runat="server" id="securityProtocol">
-                        <option value="0">auto</option>
-                        <option value="1">rdp</option>
-                        <option value="2">tls</option>
-                        <option value="3">nla</option>
-                        <option value="4">nla-ext</option>
+                    <select runat="server" id="securityProtocol" title="NLA = safest, RDP = backward compatibility (if the server doesn't enforce NLA) and interactive logon (leave user and password empty); AUTO for Hyper-V VM or if not sure">
+                        <option value="0" selected="selected">AUTO</option>
+                        <option value="1">RDP</option>
+                        <option value="2">TLS</option>
+                        <option value="3">NLA</option>
+                        <option value="4">NLA-EXT</option>
                     </select>
                 </div>
+                <div class="editHostPopupInput" runat="server" id="startProgramInput">
+                    <h5><label id="startProgramLabel" for="startProgram">Start Remote App Program</label></h5>
+                    <input type="text" runat="server" id="startProgram" title="remote program to run on session start; unavailable for Hyper-V VM"/>
+                </div>
+                <div class="editHostPopupInput">
+                    <h5><label id="promptCredentialsLabel" for="promptCredentials">Prompt for Credentials</label></h5>
+                    <input type="checkbox" runat="server" id="promptCredentials" title="prompt for credentials"/>
+                </div>
+
                 <br/>
                 <div class="editHostPopupInput">
                     <input type="button" runat="server" id="createSessionUrl" value="Create Single Use Session URL"/>
@@ -80,7 +99,6 @@
                 {
                     //alert('host was edited successfully');
                     parent.location.href = parent.location.href;
-                    parent.closePopup();
                 }
             }
 

@@ -5,8 +5,9 @@
 - [Syntax](https://github.com/cedrozor/myrtille/blob/master/DOCUMENTATION.md#syntax)
 - [Password Hash](https://github.com/cedrozor/myrtille/blob/master/DOCUMENTATION.md#password-hash)
 - [File transfer](https://github.com/cedrozor/myrtille/blob/master/DOCUMENTATION.md#file-transfer)
+- [Print document](https://github.com/cedrozor/myrtille/blob/master/DOCUMENTATION.md#print-document)
 - [Security](https://github.com/cedrozor/myrtille/blob/master/DOCUMENTATION.md#security)
-- [Configuration / Performance tweaks](https://github.com/cedrozor/myrtille/blob/master/DOCUMENTATION.md#configuration--performance-tweaks)
+- [Configuration / Performance tweaks / Debug](https://github.com/cedrozor/myrtille/blob/master/DOCUMENTATION.md#configuration--performance-tweaks--debug)
 - [Code organization](https://github.com/cedrozor/myrtille/blob/master/DOCUMENTATION.md#code-organization)
 - [Build](https://github.com/cedrozor/myrtille/blob/master/DOCUMENTATION.md#build)
 - [Startup projects](https://github.com/cedrozor/myrtille/blob/master/DOCUMENTATION.md#startup-projects)
@@ -37,7 +38,7 @@ I hope you will enjoy Myrtille! :)
 Special thanks to Catalin Trifanescu for its support.
 
 ## Installation
-You need at least IIS 7 before installing myrtille (the HTTP(S) to RDP gateway). It installs as a role on Windows Servers and as a feature on others Windows versions.
+You need at least IIS 7 before installing myrtille (the HTTP(S) to RDP/SSH gateway). It installs as a role on Windows Servers and as a feature on others Windows versions.
 
 **CAUTION! If you want to use websockets**, you need IIS 8 or greater with the websocket protocol enabled (disabled by default; see https://www.iis.net/configreference/system.webserver/websocket).
 
@@ -52,7 +53,7 @@ All releases here: https://github.com/cedrozor/myrtille/releases
 ## Auto-connect / Start remote application from URL
 Starting from version 1.3.0, it's possible to connect and run a program automatically, on session start, from an URL. It's a feature comparable to remoteApp (.rdp files).
 
-From version 1.5.0, Myrtille does support hashed passwords (so that the password is not plain text into the url).
+From version 1.5.0, Myrtille does support hashed passwords (so that the password is not plain text into the url). The objective is to have distributable urls to third parties without compromising on security (by giving real passwords); connections are then only possible through myrtille (because direct connections would require the real passwords) and access control could be added into IIS.
 
 The start remote application from url feature only works on Windows Servers editions (starting from Server 2012) and only if the program is allowed to run (remoteApp policy). See notes and limitations.
 
@@ -65,11 +66,17 @@ The pre version 1.5.0 syntax ("&password=*password*") is still supported, but it
 
 The parameters values **must be URL encoded**. You can use a tool like http://www.url-encode-decode.com/ (just copy & paste the encoded parameters into the URL).
 
+If you want to connect an Hyper-V VM automatically, add the **"&vmGuid="** parameter (and remove "&domain=" and "&program="). For enhanced mode, also add **"&vmEnhancedMode=checked"**.
+
+For SSH auto-connection, add **"&hostType=1"** (and remove "&domain=" and "&program=").
+
 ### Password Hash
 To generate a password hash, you can use the powershell script "password51.ps1" on the myrtille gateway (requires access to the machine). The script is located into the myrtille bin folder at runtime or into the "Myrtille.Services" project under Visual Studio.
 - Run the script (from its location folder): ". .\password51.ps1" (if needed, see powershell script execution policy: https://technet.microsoft.com/en-us/library/ee176961.aspx)
 - Call the encrypt function: "Encrypt-RDP-Password -Password *password*"
 - Copy & Paste the result into your URL
+
+From version 2.3.0, you can also generate a password hash from url (thanks jol64). syntax: https://server/myrtille/GetHash.aspx?password=password
 
 The password hash is only valid on the machine which generated it (the myrtille gateway); it won't work on another machine. Its length is 492 chars.
 
@@ -83,27 +90,59 @@ Myrtille supports both local and network file storage. If you want your domain u
 - In the target tab, select basic configuration to redirect everyone's folder to the same location, with create a folder for each user under the root path (the network share)
 - In the settings tab, ensure the user doesn't have exclusive rights to the documents folder (otherwise Myrtille won't be able to access it)
 
-## Security
-The installer creates a self-signed certificate for myrtille (so you can use it at https://myserver/myrtille), but you can set your own certificate (if you wish).
+## Print document
+From version 1.9.0, myrtille does support local or network printing through a pdf virtual printer, "**Myrtille PDF**", installed on the gateway. This feature can be disabled into bin/Myrtille.Services.exe.config ("FreeRDPPdfPrinter" key).
+It works like any other printer, using the print feature of your application. The resulting pdf is downloaded to the browser and can be opened/saved/printed from there.
+It can also work standalone (without myrtille integration). If used directly on the gateway (without the "redirected" suffix), or as a network printer, it will ask for the pdf output location (to change that default behavior, see bin/Myrtille.Printer.exe.config).
 
-## Configuration / Performance tweaks
+Alternatively, on Windows 10 / Server 2016, Windows provides a "Microsoft Print to PDF" printer. You can thus create a pdf on the remote server then download it (using the file transfer), but it implies an additional step.
+
+If your browser machine is on the same network as the gateway or the remote server, you also have the option to use a network printer directly from the remote session.
+
+If your remote server have internet access, you can also use a cloud printer (such a Google Print).
+
+## Security
+The installer can create a self-signed certificate for myrtille (so you can use it at https://myserver/myrtille), but you can set your own certificate (if you wish).
+
+## Configuration / Performance tweaks / Debug
 Both the gateway and services have their own .NET config files; the gateway also uses XDT transform files to adapt the settings depending on the current solution configuration.
 
-You may also play with the "js/config.js" file settings to fine tune the configuration depending on your needs.
+You may also play with the "js/config.js" file settings to fine tune the client configuration depending on your needs.
 
-The most important settings are:
-- **imageEncoding**: set the format used to render the display; possible values: AUTO, PNG (default), JPEG or WEBP. For best performance, the encoding is defined to PNG in version 1.6.0. For optimized bandwidth usage (if your bandwidth is small or if you use graphical applications), the recommanded encoding is AUTO.
-- **imageQuality**: set the % quality of the rendering (higher = better); not applicable for PNG (lossless)
-- **imageQuantity**: set the % completeness of the rendering (lower = higher drop rate); useful for low server CPU / bandwidth; use with caution as skipping some images may result in display inconsistencies
+The most important client settings (js/config.js) are:
+- **imageEncoding**: set the format used to render the display; possible values: AUTO, PNG (default, best performance and quality), JPEG or WEBP. For optimized bandwidth, the recommended setting is AUTO (encode in both PNG and JPEG and send the lowest sized); adjusted dynamically to fit the latency (more latency = switch to JPEG)
+- **imageQuality**: set the % quality of the rendering (higher = better); not applicable for PNG (lossless); adjusted dynamically to fit the latency (more latency = switch to JPEG and lower the image quality)
+- **imageQuantity**: set the % completeness of the rendering (lower = higher drop rate); useful for low server CPU / bandwidth; use with caution as skipping some images may result in display inconsistencies; adjusted dynamically to fit the latency (more latency = switch to JPEG and lower the image quantity)
 - **mouseMoveSamplingRate**: set the % sampling of the mouse moves (lower = higher drop rate); useful to reduce the server load in applications that trigger a lot of updates (i.e.: graphical applications)
 - **bufferEnabled**: buffer for user inputs; adjusted dynamically to fit the latency (more latency = more bufferization)
 
+Into the gateway settings (Web.config):
+- **AllowRemoteClipboard**: allow to access the remote clipboard (default enabled)
+- **AllowFileTransfer**: allow to upload/download files (default enabled)
+- **AllowPrintDownload**: allow to print to pdf (default enabled)
+- **AllowSessionSharing**: allow to share a remote session (default enabled); from version 2.0.0, guests can't interact with the shared session (view only)
+- **ClientIPTracking**: track the client IP (default disabled) and denies access in case of IP change; this should be disabled in some network configurations: shared proxy, roaming connection, private browsing, etc.
+- **ClientIdleTimeout**: disconnect the session after a period of time if the browser window/tab is closed, or connection is lost, to prevent it from being left open server side; default 60000 ms (1 mn). 0 to disable
+- **WebsocketBuffering**: buffer for display updates, when using websockets; updates are sent together (grouped) when the latency gets high and dropped when the bandwidth gets low (>= 1 sec)
+
+Into the services settings (bin/Myrtille.Services.exe.config):
+- **RemoteSessionLog**: rdp/ssh client logs (default disabled); stored into the log folder
+- **FreeRDPxxx**: rdp client settings; allow to tweak the remote connection options (wallpaper, theme, color depth, etc.). use with caution!
+- Multifactor Authentication and Enterprise Mode configuration
+
+Into the PDF virtual printer settings (bin/Myrtille.Printer.exe.config):
+- **OutputFile**: default output file name, if the printer is used standalone (without myrtille integration)
+- **AskUserForOutputFilename**: whether to display or not a dialog box to prompt for output file name, if the printer is used standalone
+
 ## Code organization
 - **Myrtille.RDP**: link to the myrtille FreeRDP fork. C++ code. RDP client, modified to forward the user input(s) and encode the session display into the configured image format(s). The modified code in FreeRDP is identified by region tags "#pragma region Myrtille" and "#pragma endregion".
-- **Myrtille.Common**: C# code. Common helpers.
-- **Myrtille.Services**: C# code. WCF services, hosted by a Windows Service (or a console application in debug build). start/stop the rdp client and upload/download file(s) to/from the connected user documents folder.
+- **Myrtille.SSH**: SSH.NET client. Same logic as for FreeRDP, use named pipes to communicate with the gateway.
+- **Myrtille.Common**: C# code. Common helpers. These are static libs which could be used for any project (not only myrtille).
+- **Myrtille.Services**: C# code. WCF services, hosted by a Windows Service (or a console application in debug build). start/stop the rdp/ssh client and upload/download file(s) to/from the connected user documents folder.
 - **Myrtille.Services.Contracts**: C# code. WCF contracts (interfaces).
-- **Myrtille.Web**: C# code. IIS Web application; gateway between the browser and the rdp client; maintain correlation between http and rdp sessions.
+- **Myrtille.MFAProviders**: C# code. Multifactor Authentication providers. Currently used with the OASIS adapter but could be any other.
+- **Myrtille.Enterprise**: C# code. Integration with Active Directory. Provides a dashboard to administrate the RDP and SSH hosts on a domain.
+- **Myrtille.Web**: C# code. IIS Web application; gateway between the browser and the rdp/ssh client; maintain correlation between http(s) and rdp/ssh sessions.
 - **Myrtille.Setup**: MSI installer.
 
 ## Build
@@ -123,8 +162,9 @@ The objectives are:
 
 Steps to build the FreeRDP fork (and have it working with myrtille):
 - Git clone https://github.com/cedrozor/FreeRDP.git into "<myrtille root folder>\Myrtille.RDP\FreeRDP\" (**NOTE** if using TortoiseGit, the contextual menu won't show the "Git clone" option from the "Myrtille.RDP" folder; you will have to do it from elsewhere, outside of the myrtille tree; also, don't create the "FreeRDP" folder manually, just write it into the clone target path)
-- Use cmake on it as detailed here: https://github.com/FreeRDP/FreeRDP/wiki/Build-on-Windows-Visual-C---2012-(32-and-64-bit) to generate the Visual Studio solution and projects accordingly to your dev environment (don't forget to install OpenSSL first; precompiled installers here: https://wiki.openssl.org/index.php/Binaries)
-- Open and build the generated solution. **CAUTION** if OpenSSL is configured standalone (dlls not present into the Windows "System32" folder), you will have to copy *"libeay32.dll"* and *"ssleay32.dll"* files (located into "OpenSSL\bin") into the FreeRDP build output folder
+- Install OpenSSL; precompiled installers here: https://slproweb.com/products/Win32OpenSSL.html (use the **32 bits** full version (not the light one))
+- Run cmake as detailed here: https://github.com/FreeRDP/FreeRDP/wiki/Build-on-Windows-Visual-C---2012-(32-and-64-bit) to generate the Visual Studio solution and projects accordingly to your dev environment
+- Open and build the generated solution
 
 If you plan to build the myrtille installer, you have first to build the FreeRDP fork (or you can add the FreeRDP fork solution to the myrtille solution and use the FreeRDP projects outputs instead of files).
 
@@ -137,7 +177,7 @@ You can choose the browser you want to use by right-clicking an ASPX page into t
 
 The FreeRDP executable is intended to be run from the "Myrtille.RDP" folder.
 
-You can debug FreeRDP, while an rdp session is active, by attaching the debugger to the process "wfreerdp.exe" (native code).
+You can debug FreeRDP, while an rdp session is active, by attaching the debugger to the process "wfreerdp.exe" (native code). Same for SSH with "Myrtille.SSH.exe" (managed code).
 
 Before first run, retrieve (git clone) the myrtille FreeRDP fork (https://github.com/cedrozor/FreeRDP) into the "Myrtille.RDP" folder and build it there in order to generate "wfreerdp.exe".
 
@@ -145,20 +185,20 @@ Hit F5 to start debugging.
 
 ## Communication
 ### Overview
-web browser <-> web gateway <-> wcf services <-> rdp client <-> rdp server
+web browser <-> web gateway <-> wcf services <-> client <-> host
 
 ### Protocols
-web browser <-HTTP(S),XMLHTTP,WS(S)-> web gateway <-WCF-> wcf services <-SYSTEM-> rdp client <-RDP-> rdp server
+web browser <-HTTP(S),XMLHTTP,WS(S)-> web gateway <-WCF-> wcf services <-SYSTEM-> rdp/ssh client <-RDP/SSH-> rdp/ssh server
 
-"SYSTEM" is simply starting FreeRDP as a local process, and capture the event of it being stopped.
+"SYSTEM" is simply starting the client as a local process, and capture the event of it being stopped.
 
-In order to speed up the communication between the web gateway and the rdp client, I decided to bypass the wcf services layer and set a direct communication between the two by using named pipes.
+In order to speed up the communication between the web gateway and the client, I decided to bypass the wcf services layer and set a direct communication between the two by using named pipes.
 
 It has 2 advantages: first, it's a bit faster than using TCP and, second, it guarantees a FIFO unstacking to preserve the images order.	It has also a drawback: both the web gateway and the wcf services must be on the same machine.
 
 After weighing pros and cons, I decided to kept it as is because it also has 2 additional benefits: setting up a named pipe in C++ is a bit simpler than a TCP socket (named pipes are handled as simple files) and having a single setup is easier for the end user.
 		
-web gateway <-IPC-> rdp client
+web gateway <-IPC-> rdp/ssh client
 	
 However, I'm fully aware that it breaks the distributed architecture pattern. Thus, if you want, feel free to move the named pipes management up to the wcf services layer and proxy the data from/to the web gateway.
 
@@ -171,10 +211,10 @@ In addition to 2fa, an access control could be enforced to allow connections onl
 
 The adapter has been written to use a platform provided by Olive Innovations and named OASIS. It's free to use up to 10 users; to use this service follow these instructions:
 
-- Visit https://oasis.oliveinnovations.com and register for free
+- Visit https://www.oliveinnovations.com and register for free
 - Once logged in, create a User Group (into the menu select User Groups), then click New, input a Name (i.e. Myrtille) and save
 - Create a user (choose Users from the menu), then click New, input user details and tick the box to send register by email (**IMPORTANT** the username must be the same as the username you will login with myrtille; when registering via email, the user will have a link to complete the registration) and save. Into the user details page, select the user group created in Step 2
-NOTE: If you have enabled Enterprise Mode and wish to sync your Active Directory with OASIS, visit http://www.oliveinnovations.com, go to download area and download the Gateway application; instructions for configuration can be found into the docs on the same website
+NOTE: If you have enabled Enterprise Mode and wish to sync your Active Directory with OASIS, visit https://www.oliveinnovations.com, go to download area and download the Gateway application; instructions for configuration can be found into the docs on the same website
 - Create an application (choose Applications from the menu), then click New, enter a Name and save. You will be directed to the application details page, grant access to the user group created in Step 2
 - Within the application page, click the button Application Key, this will display the information to configure myrtille
 
@@ -189,7 +229,10 @@ The included MFA adapter is written by Olive Innovations Ltd for use with the OA
 If you wish to create your own MFA adapter, `Myrtille.Services.Contracts` contains the interfaces you need.
 
 ## Enterprise Mode
-When enabled, the enterprise mode authenticates users against a domain and allows administrators to create hosts connections which can be restricted to the security groups the authenticated users belongs to.
+When enabled, the enterprise mode authenticates users against a domain and allows administrators to create hosts connections (which can be restricted to the security groups the authenticated users belongs to).
+
+Hosts are presented into a simple dashboard and can be connected in 1 click.
+
 **CAUTION** This requires the myrtille machine to have joined the domain or be able to resolve the domain controller FQDN or IP.
 
 The enterprise mode provides the following additional features:
@@ -204,7 +247,7 @@ To enable enterprise mode, edit the app.config file of Myrtille.Services and unc
 - `EnterpriseDomain`, this is the name of your domain (i.e. MYDOMAIN or mydomain.local) if myrtille is part of it or the domain controller FQDN or IP otherwise
 - Restart Myrtille.Services windows service to use the new settings
 
-To specify a customer path for the MyrtilleEnterprise database or use another SQL server amend Myrtille.Services app.config connectionString
+To specify a customer path for the MyrtilleEnterprise database or use another SQL server, amend Myrtille.Services app.config connectionString
 
 If you wish to create your own enterprise adapter (with a different authentication, database or behavior), `Myrtille.Services.Contracts` contains the interfaces you need.
 
@@ -217,10 +260,26 @@ If you wish to create your own enterprise adapter (with a different authenticati
 
 - Safari 5.1.7 doesn't support the IIS 8+ websocket implementation because it's based on an older version of the websocket standard (hybi instead of RFC6455) (http://stackoverflow.com/questions/32628211/connecting-to-iis-8-from-safari-5-1-7-by-websocket). Myrtille does fallback to long-polling if websockets aren't supported or fail.
 
+- Safari 5.1.7 doesn't support xtermjs (SSH terminal); this version of Safari for Windows is not officially supported anymore, so you should use something else anyway.
+
+- xtermjs (SSH terminal) rendering is not blazing fast; it's functional but don't expect a native putty client, neither in speed and features. Also, remember to refresh (or "cls") the terminal often because it gets slower as the DOM fills with data.
+
 - In order to keep the installation simple, both the myrtille gateway and services are installed on the same machine. They do however conform to a distributed architecture; if needed, given some additionnal code, myrtille services could acts as a proxy, so the gateway could be installed and operate separately (this could be handy if the gateway should go into a DMZ).
+
+- Keyboard is mapped to english/US (latin QWERTY) layout by default. If you have troubles with some characters/keys not working as expected, try to add that keyboard layout to your server (and select it when connected).
+
+- To connect an Hyper-V VM, you have to enter the Hyper-V host as server (hostname or address), the guest VM GUID (https://www.petri.com/get-hyper-v-virtual-machine-process-id-and-guid) and a valid user/password on the Hyper-V host (authentication is done locally). The user must be member of the **"Hyper-V Administrators"** group or granted access to the VM with the **Grant-VMConnectAccess** cmdlet (https://docs.microsoft.com/en-us/powershell/module/hyper-v/grant-vmconnectaccess?view=win10-ps). The VM will then request authentication on its own (and you will be able to use a domain user, if needed).
+
+- When connecting an Hyper-V VM, the display is limited to the VM resolution (default 1024 x 768) whatever the client (browser) resolution. You can change that resolution into the advanced display settings of the VM (even directly within the session, if the connected user have enough privileges).
+
+- If enhanced mode is not supported by the VM, or disabled, the remote clipboard and the "Myrtille PDF" virtual printer are not available into the session. See https://www.tenforums.com/tutorials/57136-turn-off-hyper-v-enhanced-session-mode-windows-10-a.html for Windows 10 and http://www.systemcentercentral.com/what-is-enhanced-session-mode-in-windows-server-2012-r2-hyper-v-and-when-should-i-use-it/ for others versions.
+
+- The "Start program from url" feature doesn't work with an Hyper-V VM connection.
 
 ## Troubleshoot
 First at all, ensure the Myrtille prerequisites are met (IIS 7 or greater (preferably IIS 8+ with websocket protocol enabled) and .NET 4.5+). Note that IIS must be installed separately, before running the installer (see "Installation").
+
+Also please read notes and limitations above.
 
 - The installation fails
 	- Prerequisites are not downloaded: the installer was run directly using the MSI file; this exclude the bootstrapper (Setup.exe), whose purpose is to check and download/install the prerequisites if necessary
@@ -239,25 +298,34 @@ First at all, ensure the Myrtille prerequisites are met (IIS 7 or greater (prefe
 	- Ensure you entered valid connection information (server address, user credentials, etc.).
 	- Ensure the network traffic (websockets and xmlhttp in particular) is not blocked by a firewall, proxy, reverse proxy, VPN or whatever.
 	- Ensure the "Myrtille.Services" Windows service (or console application if running under Visual Studio) is started.
-	- Ensure the RDP client ("wfreerdp.exe") does exists (into the "Myrtille.RDP" output folder, if running under Visual Studio, or into the "bin" folder otherwise); if not, you need to retrieve (git clone) the myrtille FreeRDP fork into the "Myrtille.RDP" folder and build it there.
+	- Ensure the RDP (or SSH) client ("wfreerdp.exe" or "Myrtille.SSH.exe") does exists (into the "Myrtille.RDP" or "Myrtille.SSH" output folder, if running under Visual Studio, or into the "bin" folder otherwise); if not, you need to retrieve (git clone) the myrtille FreeRDP fork into the "Myrtille.RDP" folder and build it there.
 	- Ensure the Microsoft Visual C++ 2015 redistributables (x86) are installed (control panel > programs > programs and features); they are required by the RDP client (myrtille\bin\wfreerdp.exe).
 	- Try to run wfreerdp.exe (just double-click it, no params), into the myrtille binaries folder. if there is a missing dll, or another issue, Windows should popup an error message (i.e.: MSVCR120.dll = MSVC 12 = Microsoft Visual C++ 2013 redistributables, MSVCP140.dll = MSVC 14 = Microsoft Visual C++ 2015 redistributables, etc.). Depending on your build environment and options, you will need the appropriate redistributables.
-	- Check the RDP server configuration (does the user exists, is it a member of the "Remote Desktop Users" group, are Remote Desktop CALs valid?, etc.). You can setup it automatically by importing the "myrtille\bin\RDPSetup.reg" file into registry.
-	- Check the RDP server windows event logs.
+	- Check the RDP (or SSH) server configuration (does the user exists, is it a member of the "Remote Desktop Users" group, are Remote Desktop CALs valid?, etc.). You can setup it automatically by importing the "myrtille\bin\RDPSetup.reg" file into registry.
+	- Check the RDP (or SSH) server windows event logs.
 	- Check the gateway windows event logs, particulary regarding .NET.
 	- Retry with debug enabled and check logs (into the "log" folder). You can change their verbosity level in config (but be warned it will affect peformance and flood the disk if set too verbose).
+
+- Some characters/keys are not working as expected
+	- Keyboard is mapped to english/US layout by default. Try to add that layout to your server (and select it when connected).
 
 - I don't have a mouse (or a right button), how can I Right-Click? (i.e.: on a touchpad or iOS device)
 	- You can toggle on the "Right-Click" button into the toolbar, then touch or left-click the screen to trigger a right-click at that position
 
-- The RDP session continues to run after clicking "Disconnect"
-	- Check the RDP server configuration (session disconnect timeout in particular). You can setup it automatically by importing the Myrtille "myrtille\bin\RDPSetup.reg" file into registry.
+- Nothing happens when I click on some toolbar buttons
+- Nothing happens when I print with the "Myrtille PDF" redirected printer
+	- Although myrtille dialogs should work (same domain origin policy), ensure you don't have a popup blocker (Chrome have one by default), or disable it or add an exception for the myrtille domain
+
+- The RDP (or SSH) session continues to run after clicking "Disconnect"
+	- Check the RDP (or SSH) server configuration (session disconnect timeout in particular). You can setup it automatically by importing the Myrtille "myrtille\bin\RDPSetup.reg" file into registry.
 
 - Myrtille is slow or buggy
 	- Enable the stats bar to have detailed information about the current connection. Check latency and bandwidth, among other things. **Stats, debug and HTML4 buttons can be enabled into css/Default.css (hidden by default)**
 	- Ensure debug is disabled or otherwise logs are not set to "Information" level (Myrtille "Web.Config" file, "system.diagnostics" section, default is "Warning"). Check logs, if debug is enabled. **FreeRDP logs can be enabled into bin/Myrtille.Services.exe.config ("RemoteSessionLog" key, at the bottom of the file)**. Logs are located into the log folder.
-	- If debug is enabled and you are running Myrtille in debug mode under Visual Studio, you will have the FreeRDP window (session display) and console (rdp events) shown to you. It may help to debug.
+	- If debug is enabled and you are running Myrtille in debug mode under Visual Studio, you will have the FreeRDP window (session display) and console (rdp events) shown to you. Same for SSH. It may help to debug.
 	- Switch from HTML4 to HTML5 rendering, or inversely (should be faster with HTML5).
 	- Check your network configuration (is something filtering the traffic?) and capabilities (high latency or small bandwidth?).
+	- Ensure buffering is enabled on both client and gateway (see configuration / performance tweaks / Debug (https://github.com/cedrozor/myrtille/blob/master/DOCUMENTATION.md#configuration--performance-tweaks--debug))
+	- the SSH terminal (xtermjs) becomes laggy after some time; try to refresh or clear ("cls") the screen from time to time
 	- Maybe the default settings are not adapted to your configuration. You can tweak the "js/config.js" file as you wish (see extensive comments there).
 	- Despite my best efforts to produce quality and efficient code, I may have missed/messed something... Please don't hesitate to tell me or add your contribution! Thanks! :)

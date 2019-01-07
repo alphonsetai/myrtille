@@ -17,3 +17,4 @@
 --%>
 
 <%@ Page Language="C#" Inherits="Myrtille.Web.SendInputs" Codebehind="SendInputs.aspx.cs" AutoEventWireup="true" Culture="auto" UICulture="auto" %>
+<%@ OutputCache Location="None" %>

@@ -68,14 +68,13 @@
 
 		<script type="text/javascript" language="javascript" defer="defer">
 
-            // edit host success
+            // change password success
             function onChangeSuccess()
             {
                 var idx = window.location.search.indexOf('change=success');
                 if (idx != -1)
                 {
                     parent.location.href = parent.location.href;
-                    parent.closePopup();
                 }
             }
 

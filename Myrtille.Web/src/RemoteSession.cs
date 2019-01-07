@@ -16,6 +16,7 @@
     limitations under the License.
 */
 
+using System;
 using Myrtille.Services.Contracts;
 
 namespace Myrtille.Web
@@ -24,9 +25,14 @@ namespace Myrtille.Web
     {
         public RemoteSessionManager Manager { get; private set; }
 
-        public int Id;
+        public Guid Id;
         public RemoteSessionState State;
-        public string ServerAddress;
+        public string HostName;
+        public HostTypeEnum HostType;                   // RDP or SSH
+        public SecurityProtocolEnum SecurityProtocol;
+        public string ServerAddress;                    // :port, if specified
+        public string VMGuid;                           // RDP over VM bus (Hyper-V)
+        public bool VMEnhancedMode;                     // RDP over VM bus (Hyper-V)
         public string UserDomain;
         public string UserName;
         public string UserPassword;
@@ -40,12 +46,54 @@ namespace Myrtille.Web
         public bool DebugMode;
         public bool CompatibilityMode;
         public string StartProgram;
-        public bool AllowRemoteClipboard;               // set in myrtille web config
-        public SecurityProtocolEnum SecurityProtocol;
+        public bool AllowRemoteClipboard;               // set in web config
+        public bool AllowFileTransfer;                  // set in web config
+        public bool AllowPrintDownload;                 // set in web config
+        public bool AllowSessionSharing;                // set in web config
+        public string OwnerSessionID;                   // the http session on which the remote session is bound to
         public int ExitCode;
 
-        public RemoteSession()
+        public RemoteSession(
+            Guid id,
+            RemoteSessionState state,
+            string hostName,
+            HostTypeEnum hostType,
+            SecurityProtocolEnum securityProtocol,
+            string serverAddress,
+            string vmGuid,
+            bool vmEnhancedMode,
+            string userDomain,
+            string userName,
+            string userPassword,
+            int clientWidth,
+            int clientHeight,
+            string startProgram,
+            bool allowRemoteClipboard,
+            bool allowFileTransfer,
+            bool allowPrintDownload,
+            bool allowSessionSharing,
+            string ownerSessionID)
         {
+            Id = id;
+            State = state;
+            HostName = hostName;
+            HostType = hostType;
+            SecurityProtocol = securityProtocol;
+            ServerAddress = serverAddress;
+            VMGuid = vmGuid;
+            VMEnhancedMode = vmEnhancedMode;
+            UserDomain = userDomain;
+            UserName = userName;
+            UserPassword = userPassword;
+            ClientWidth = clientWidth;
+            ClientHeight = clientHeight;
+            StartProgram = startProgram;
+            AllowRemoteClipboard = allowRemoteClipboard;
+            AllowFileTransfer = allowFileTransfer;
+            AllowPrintDownload = allowPrintDownload;
+            AllowSessionSharing = allowSessionSharing;
+            OwnerSessionID = ownerSessionID;
+
             Manager = new RemoteSessionManager(this);
         }
     }

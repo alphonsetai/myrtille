@@ -19,7 +19,6 @@
 using System;
 using System.IO;
 using System.Threading;
-using System.Web;
 using System.Web.UI;
 using Myrtille.Helpers;
 using Myrtille.Services.Contracts;
@@ -28,8 +27,8 @@ namespace Myrtille.Web
 {
     public partial class FileStorage : Page
     {
-        private RemoteSession _remoteSession;
         private FileStorageClient _fileStorageClient;
+        private RemoteSession _remoteSession;
 
         /// <summary>
         /// page init
@@ -40,52 +39,52 @@ namespace Myrtille.Web
             object sender,
             EventArgs e)
         {
+            _fileStorageClient = new FileStorageClient();
+
+            // retrieve the active remote session
             try
             {
-                // retrieve the active remote session, if any
-                if (HttpContext.Current.Session[HttpSessionStateVariables.RemoteSession.ToString()] != null)
-                {
-                    try
-                    {
-                        if (HttpContext.Current.Session[HttpSessionStateVariables.RemoteSession.ToString()] == null)
-                            throw new NullReferenceException();
+                if (Session[HttpSessionStateVariables.RemoteSession.ToString()] == null)
+                    throw new NullReferenceException();
 
-                        _remoteSession = (RemoteSession)HttpContext.Current.Session[HttpSessionStateVariables.RemoteSession.ToString()];
-                    }
-                    catch (Exception exc)
-                    {
-                        System.Diagnostics.Trace.TraceError("Failed to retrieve the remote session ({0})", exc);
-                    }
-                }
+                _remoteSession = (RemoteSession)Session[HttpSessionStateVariables.RemoteSession.ToString()];
 
-                // ensure there is an active remote session
                 // if a domain is specified, the roaming user profile is loaded from the Active Directory
                 // file storage is synchronized with the user "My documents" folder (will use folder redirection if defined)
                 // user credentials will be checked prior to any file operation
                 // if possible, use SSL to communicate with the service
-                if (_remoteSession != null && (_remoteSession.State == RemoteSessionState.Connecting || _remoteSession.State == RemoteSessionState.Connected) &&
-                   (_remoteSession.ServerAddress.ToLower() == "localhost" || _remoteSession.ServerAddress == "127.0.0.1" || _remoteSession.ServerAddress == "[::1]" || _remoteSession.ServerAddress == HttpContext.Current.Request.Url.Host || !string.IsNullOrEmpty(_remoteSession.UserDomain)) &&
-                   !string.IsNullOrEmpty(_remoteSession.UserName) && !string.IsNullOrEmpty(_remoteSession.UserPassword))
+                if ((_remoteSession.State == RemoteSessionState.Connecting || _remoteSession.State == RemoteSessionState.Connected) &&
+                    Session.SessionID.Equals(_remoteSession.OwnerSessionID) &&
+                    _remoteSession.HostType != HostTypeEnum.SSH &&
+                    _remoteSession.AllowFileTransfer &&
+                    (_remoteSession.ServerAddress.ToLower() == "localhost" || _remoteSession.ServerAddress == "127.0.0.1" || _remoteSession.ServerAddress == "[::1]" || _remoteSession.ServerAddress == Request.Url.Host || !string.IsNullOrEmpty(_remoteSession.UserDomain)) &&
+                    !string.IsNullOrEmpty(_remoteSession.UserName) && !string.IsNullOrEmpty(_remoteSession.UserPassword) &&
+                    string.IsNullOrEmpty(_remoteSession.VMGuid))
                 {
-                    _fileStorageClient = new FileStorageClient();
-
-                    var files = _fileStorageClient.GetUserDocumentsFolderFiles(
-                        _remoteSession.Id,
-                        _remoteSession.UserDomain,
-                        _remoteSession.UserName,
-                        _remoteSession.UserPassword);
-
-                    if (files.Count > 0)
+                    try
                     {
-                        fileToDownloadSelect.DataSource = files;
-                        fileToDownloadSelect.DataBind();
-                        downloadFileButton.Disabled = false;
+                        var files = _fileStorageClient.GetUserDocumentsFolderFiles(
+                            _remoteSession.Id,
+                            _remoteSession.UserDomain,
+                            _remoteSession.UserName,
+                            _remoteSession.UserPassword);
+
+                        if (files.Count > 0)
+                        {
+                            fileToDownloadSelect.DataSource = files;
+                            fileToDownloadSelect.DataBind();
+                            downloadFileButton.Disabled = false;
+                        }
+                    }
+                    catch (Exception exc)
+                    {
+                        System.Diagnostics.Trace.TraceError("Failed to retrieve the user documents ({0})", exc);
                     }
                 }
             }
             catch (Exception exc)
             {
-                System.Diagnostics.Trace.TraceError("Failed to init file storage ({0})", exc);
+                System.Diagnostics.Trace.TraceError("Failed to retrieve the active remote session ({0})", exc);
             }
         }
 

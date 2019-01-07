@@ -58,13 +58,31 @@ namespace Myrtille.Web {
         protected global::System.Web.UI.HtmlControls.HtmlGenericControl logo;
         
         /// <summary>
-        /// domainServerDiv control.
+        /// hostConnectDiv control.
         /// </summary>
         /// <remarks>
         /// Auto-generated field.
         /// To modify move field declaration from designer file to code-behind file.
         /// </remarks>
-        protected global::System.Web.UI.HtmlControls.HtmlGenericControl domainServerDiv;
+        protected global::System.Web.UI.HtmlControls.HtmlGenericControl hostConnectDiv;
+        
+        /// <summary>
+        /// hostType control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlSelect hostType;
+        
+        /// <summary>
+        /// securityProtocol control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlSelect securityProtocol;
         
         /// <summary>
         /// server control.
@@ -74,6 +92,24 @@ namespace Myrtille.Web {
         /// To modify move field declaration from designer file to code-behind file.
         /// </remarks>
         protected global::System.Web.UI.HtmlControls.HtmlInputText server;
+        
+        /// <summary>
+        /// vmGuid control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlInputText vmGuid;
+        
+        /// <summary>
+        /// vmEnhancedMode control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlInputCheckBox vmEnhancedMode;
         
         /// <summary>
         /// domain control.
@@ -175,13 +211,31 @@ namespace Myrtille.Web {
         protected global::System.Web.UI.HtmlControls.HtmlGenericControl hosts;
         
         /// <summary>
-        /// newHost control.
+        /// enterpriseUserInfo control.
         /// </summary>
         /// <remarks>
         /// Auto-generated field.
         /// To modify move field declaration from designer file to code-behind file.
         /// </remarks>
-        protected global::System.Web.UI.HtmlControls.HtmlInputButton newHost;
+        protected global::System.Web.UI.HtmlControls.HtmlInputText enterpriseUserInfo;
+        
+        /// <summary>
+        /// newRDPHost control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlInputButton newRDPHost;
+        
+        /// <summary>
+        /// newSSHHost control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlInputButton newSSHHost;
         
         /// <summary>
         /// logout control.
@@ -202,6 +256,15 @@ namespace Myrtille.Web {
         protected global::System.Web.UI.WebControls.Repeater hostsList;
         
         /// <summary>
+        /// toolbarToggle control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlGenericControl toolbarToggle;
+        
+        /// <summary>
         /// toolbar control.
         /// </summary>
         /// <remarks>
@@ -218,6 +281,15 @@ namespace Myrtille.Web {
         /// To modify move field declaration from designer file to code-behind file.
         /// </remarks>
         protected global::System.Web.UI.HtmlControls.HtmlInputText serverInfo;
+        
+        /// <summary>
+        /// userInfo control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlInputText userInfo;
         
         /// <summary>
         /// stat control.
@@ -299,6 +371,24 @@ namespace Myrtille.Web {
         /// To modify move field declaration from designer file to code-behind file.
         /// </remarks>
         protected global::System.Web.UI.HtmlControls.HtmlInputButton mrc;
+        
+        /// <summary>
+        /// vswipe control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlInputButton vswipe;
+        
+        /// <summary>
+        /// share control.
+        /// </summary>
+        /// <remarks>
+        /// Auto-generated field.
+        /// To modify move field declaration from designer file to code-behind file.
+        /// </remarks>
+        protected global::System.Web.UI.HtmlControls.HtmlInputButton share;
         
         /// <summary>
         /// disconnect control.

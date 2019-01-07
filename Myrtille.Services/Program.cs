@@ -32,6 +32,7 @@ namespace Myrtille.Services
     {
         private static ServiceHost _remoteSessionProcess;
         private static ServiceHost _localFileStorage;
+        private static ServiceHost _printerService;
         private static ServiceHost _mfaAuthentication;
         private static ServiceHost _enterpriseServices;
 
@@ -105,6 +106,7 @@ namespace Myrtille.Services
 
                 _remoteSessionProcess = OpenService(typeof(RemoteSessionProcess));
                 _localFileStorage = OpenService(typeof(FileStorage));
+                _printerService = OpenService(typeof(PrinterService));
                 _mfaAuthentication = OpenService(typeof(MFAAuthentication));
                 _enterpriseServices = OpenService(typeof(EnterpriseService));
 
@@ -113,6 +115,7 @@ namespace Myrtille.Services
 
                 CloseService(ref _remoteSessionProcess);
                 CloseService(ref _localFileStorage);
+                CloseService(ref _printerService);
                 CloseService(ref _mfaAuthentication);
                 CloseService(ref _enterpriseServices);
             }
@@ -125,6 +128,7 @@ namespace Myrtille.Services
 
             _remoteSessionProcess = OpenService(typeof(RemoteSessionProcess));
             _localFileStorage = OpenService(typeof(FileStorage));
+            _printerService = OpenService(typeof(PrinterService));
             _mfaAuthentication = OpenService(typeof(MFAAuthentication));
             _enterpriseServices = OpenService(typeof(EnterpriseService));
         }
@@ -133,9 +137,12 @@ namespace Myrtille.Services
 		{
             CloseService(ref _remoteSessionProcess);
             CloseService(ref _localFileStorage);
+            CloseService(ref _printerService);
             CloseService(ref _mfaAuthentication);
             CloseService(ref _enterpriseServices);
         }
+
+        // TODO? create config sections (into app.config) for the 2 adapters below
 
         private static void LoadMFAAdapter()
         {
@@ -185,7 +192,9 @@ namespace Myrtille.Services
             var dataDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\data");
 
             if (!Directory.Exists(dataDir))
+            {
                 Directory.CreateDirectory(dataDir);
+            }
 
             AppDomain.CurrentDomain.SetData("DataDirectory", dataDir);
         }

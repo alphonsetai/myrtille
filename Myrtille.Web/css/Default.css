@@ -52,9 +52,10 @@ a img
     top: 50%;
     left: 50%;
     margin-top: -150px;
-    margin-left: -150px;
+    margin-left: -225px;
     width: 450px;
     height: 300px;
+    padding: 10px 10px 30px 10px;
 }
 
 /* customizable logo (replace the background image by yours) */
@@ -62,8 +63,12 @@ a img
 #logo
 {
     background-image: url("../img/RemoteDesktop.png");
-    width: 128px;
+    background-repeat: no-repeat;
+    background-position: center;
     height: 128px;
+    width: auto;
+    max-width: 400px;
+    max-height: 128px;
     margin-bottom: 20px;
 }
 
@@ -90,7 +95,15 @@ label,
     text-decoration: underline;
 }
 
+#hostType,
+#securityProtocol
+{
+    width: 204px;
+    margin-top: 2px;
+}
+
 #server,
+#vmGuid,
 #domain,
 #user,
 #password,
@@ -99,6 +112,12 @@ label,
 {
     width: 200px;
     margin-top: 2px;
+}
+
+#vmEnhancedMode
+{
+    margin-top: 6px;
+    margin-left: 0px;
 }
 
 /* program to run is better defined into an URL, but can be enabled into the login screen */
@@ -147,6 +166,23 @@ label,
     /* if needed */
 }
 
+#enterpriseUserInfo
+{
+    width: 250px;
+}
+
+#newRDPHost,
+#newSSHHost,
+#logout
+{
+    width: 150px;
+}
+
+#hostsList
+{
+    /* if needed */
+}
+
 .hostDiv
 {
     display: inline-block;
@@ -175,17 +211,31 @@ label,
 /*** TOOLBAR                                                                                                                                                                                       ***/
 /*****************************************************************************************************************************************************************************************************/
 
+#toolbarToggle
+{
+    position: absolute;
+    border: 1px solid #ddd;
+    background-color: #F4F4F4;
+    z-index: 200;
+}
+
 #toolbar
 {
     overflow: auto;
     display: inline-block;
 }
 
-/* server info */
-#serverInfo
+/* connection */
+#serverInfo,
+#userInfo
 {
     float: left;
-    width: 14%;
+    width: 250px;
+}
+
+#serverInfo
+{
+    margin-left: 23px;
 }
 
 /* controls */
@@ -198,14 +248,15 @@ label,
 #files,
 #cad,
 #mrc,
+#vswipe,
+#share,
 #disconnect
 {
     float: left;
-    width: 12%;
+    width: 135px;
 }
 
-/* stat, debug and browser mode are now disabled by default (to enable for test or diagnostic, just comment out the css below and tweak the controls width above) */
-#stat,
+/* debug and browser mode are disabled by default (to enable for test or diagnostic, just comment out the css below and tweak the controls width above) */
 #debug,
 #browser
 {
@@ -308,8 +359,8 @@ label,
 #editHostPopup,
 #editHostPopupInner
 {
-    width: 400px;
-    height: 270px;
+    width: 420px;
+    height: 450px;
 }
 
 #editHostPopupInner
@@ -329,13 +380,39 @@ label,
     padding-left: 10px;
 }
 
+/* credential popup*/
+
+#editCredentialPopup,
+#editCredentialPopupInner
+{
+    width: 400px;
+    height: 200px;
+}
+
+#editCredentialPopupInner
+{
+    color: #000;
+    background: #fff;
+}
+
+#editCredentialsPopupTitle
+{
+    padding-top: 20px;
+    padding-left: 10px;
+}
+
+.editCredentialPopupInput
+{
+    padding-left: 10px;
+}
+
 /* host session popup */
 
 #editHostSessionPopup,
 #editHostSessionPopupInner
 {
     width: 400px;
-    height: 400px;
+    height: 450px;
 }
 
 #editHostSessionPopupInner
@@ -360,6 +437,32 @@ label,
     width: 370px;
 }
 
+/* share session popup*/
+
+#shareSessionPopup,
+#shareSessionPopupInner
+{
+    width: 400px;
+    height: 300px;
+}
+
+#shareSessionPopupInner
+{
+    color: #000;
+    background: #fff;
+}
+
+#shareSessionPopupTitle
+{
+    padding-top: 20px;
+    padding-left: 10px;
+}
+
+.shareSessionPopupInput
+{
+    padding-left: 10px;
+}
+
 
 /* change password popup */
 
@@ -382,7 +485,8 @@ label,
     padding-left: 10px;
 }
 
-.changePasswordMessage{
+.changePasswordMessage
+{
     padding-left: 10px;
 }
 
@@ -391,13 +495,13 @@ label,
     padding-left: 10px;
 }
 
-#changeError {
+#changeError
+{
     padding-left: 10px;
     font-size: 10pt;
     color: red;
     width:380px;
 }
-
 
 /* remote session display */
 
@@ -405,9 +509,11 @@ label,
 {
     position: absolute;
     z-index: 100;
+    /* fix touchscreen on Edge (disabled by default and using pointer events instead of touch) by emulating mouse events */
+    touch-action: none;
 }
 
-/* remote session display: canvas */
+/* remote session display: canvas (HTML5) */
 
 canvas
 {
@@ -415,7 +521,7 @@ canvas
     z-index: 100;
 }
 
-/* remote session display: divs */
+/* remote session display: divs (HTML4) */
 
 .imageDiv
 {
@@ -427,12 +533,18 @@ canvas
 
 /* remote session helpers */
 
+#cacheDiv
+{
+    visibility: hidden;
+	display: none;
+}
+
 #statDiv
 {
     position: absolute;
     visibility: hidden;
 	display: none;
-	float: left;
+	margin-left: 23px;
 	font-size: 10px;
 	border: none;
 	background-color: black;

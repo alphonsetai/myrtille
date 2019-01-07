@@ -20,6 +20,7 @@
 <%@ OutputCache Location="None" %>
 <%@ Import Namespace="System.Globalization" %>
 <%@ Import Namespace="Myrtille.Web" %>
+<%@ Import Namespace="Myrtille.Services.Contracts" %>
 
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 
@@ -37,6 +38,7 @@
         
         <link rel="icon" type="image/png" href="img/myrtille.png"/>
         <link rel="stylesheet" type="text/css" href="css/Default.css"/>
+        <link rel="stylesheet" type="text/css" href="css/xterm.css"/>
 
         <script language="javascript" type="text/javascript" src="js/myrtille.js"></script>
         <script language="javascript" type="text/javascript" src="js/config.js"></script>
@@ -44,6 +46,7 @@
         <script language="javascript" type="text/javascript" src="js/display.js"></script>
         <script language="javascript" type="text/javascript" src="js/display/canvas.js"></script>
         <script language="javascript" type="text/javascript" src="js/display/divs.js"></script>
+        <script language="javascript" type="text/javascript" src="js/display/terminaldiv.js"></script>
         <script language="javascript" type="text/javascript" src="js/network.js"></script>
         <script language="javascript" type="text/javascript" src="js/network/buffer.js"></script>
         <script language="javascript" type="text/javascript" src="js/network/longpolling.js"></script>
@@ -53,6 +56,8 @@
         <script language="javascript" type="text/javascript" src="js/user/keyboard.js"></script>
         <script language="javascript" type="text/javascript" src="js/user/mouse.js"></script>
         <script language="javascript" type="text/javascript" src="js/user/touchscreen.js"></script>
+        <script language="javascript" type="text/javascript" src="js/xterm/xterm.js"></script>
+        <script language="javascript" type="text/javascript" src="js/xterm/addons/fit/fit.js"></script>
 
 	</head>
 	
@@ -63,7 +68,8 @@
         <%=(RemoteSession != null && RemoteSession.CompatibilityMode).ToString(CultureInfo.InvariantCulture).ToLower()%>,
         <%=(RemoteSession != null && RemoteSession.ScaleDisplay).ToString(CultureInfo.InvariantCulture).ToLower()%>,
         <%=(RemoteSession != null ? RemoteSession.ClientWidth.ToString() : "null")%>,
-        <%=(RemoteSession != null ? RemoteSession.ClientHeight.ToString() : "null")%>);">
+        <%=(RemoteSession != null ? RemoteSession.ClientHeight.ToString() : "null")%>,
+        '<%=(RemoteSession != null ? RemoteSession.HostType.ToString() : HostTypeEnum.RDP.ToString())%>');">
 
         <!-- custom UI: all elements below, including the logo, are customizable into Default.css -->
 
@@ -83,16 +89,55 @@
                 <div runat="server" id="logo"></div>
 
                 <!-- standard mode -->
-                <div runat="server" id="domainServerDiv">
-                    
+                <div runat="server" id="hostConnectDiv">
+
+                    <!-- type -->
+                    <div class="inputDiv">
+                        <label id="hostTypeLabel" for="hostType">Protocol</label>
+                        <select runat="server" id="hostType" onchange="onHostTypeChange(this);" title="host type">
+                            <option value="0" selected="selected">RDP</option>
+                            <option value="0">RDP over VM bus (Hyper-V)</option>
+                            <option value="1">SSH</option>
+                        </select>
+                    </div>
+
+                    <!-- security -->
+                    <div class="inputDiv" id="securityProtocolDiv">
+                        <label id="securityProtocolLabel" for="securityProtocol">Security</label>
+                        <select runat="server" id="securityProtocol" title="NLA = safest, RDP = backward compatibility (if the server doesn't enforce NLA) and interactive logon (leave user and password empty); AUTO for Hyper-V VM or if not sure">
+                            <option value="0" selected="selected">AUTO</option>
+                            <option value="1">RDP</option>
+                            <option value="2">TLS</option>
+                            <option value="3">NLA</option>
+                            <option value="4">NLA-EXT</option>
+                        </select>
+                    </div>
+
                     <!-- server -->
                     <div class="inputDiv">
                         <label id="serverLabel" for="server">Server (:port)</label>
-                        <input type="text" runat="server" id="server" title="server address or hostname (:port, if other than the standard 3389). use [] for ipv6. CAUTION! if using a hostname or if you have a connection broker, make sure the DNS is reachable by myrtille (or myrtille has joined the domain)"/>
+                        <input type="text" runat="server" id="server" title="host name or address (:port, if other than the standard 3389 (rdp), 2179 (rdp over vm bus) or 22 (ssh)). use [] for ipv6. CAUTION! if using a hostname or if you have a connection broker, make sure the DNS is reachable by myrtille (or myrtille has joined the domain)"/>
+                    </div>
+
+                    <!-- hyper-v -->
+                    <div id="vmDiv" style="visibility:hidden;display:none;">
+
+                        <!-- vm guid -->
+                        <div class="inputDiv" id="vmGuidDiv">
+                            <label id="vmGuidLabel" for="vmGuid">VM GUID</label>
+                            <input type="text" runat="server" id="vmGuid" title="guid of the Hyper-V VM to connect"/>
+                        </div>
+
+                        <!-- enhanced mode -->
+                        <div class="inputDiv" id="vmEnhancedModeDiv">
+                            <label id="vmEnhancedModeLabel" for="vmEnhancedMode">VM Enhanced Mode</label>
+                            <input type="checkbox" runat="server" id="vmEnhancedMode" title="faster display and clipboard/printer redirection, if supported by the guest VM"/>
+                        </div>
+
                     </div>
 
                     <!-- domain -->
-                    <div class="inputDiv">
+                    <div class="inputDiv" id="domainDiv">
                         <label id="domainLabel" for="domain">Domain (optional)</label>
                         <input type="text" runat="server" id="domain" title="user domain (if applicable)"/>
                     </div>
@@ -131,7 +176,7 @@
 
                 <!-- myrtille version -->
                 <div id="version">
-                    <a href="http://cedrozor.github.io/myrtille/" title="myrtille">
+                    <a href="http://cedrozor.github.io/myrtille/" target="_blank" title="myrtille">
                         <img src="img/myrtille.png" alt="myrtille" width="15px" height="15px"/>
                     </a>
                     <span>
@@ -154,8 +199,14 @@
                 
                 <div id="hostsControl">
 
-                    <!-- new host -->
-                    <input type="button" runat="server" id="newHost" value="New Host" onclick="openPopup('editHostPopup', 'EditHost.aspx');" title="New Host"/>
+                    <!-- enterprise user info -->
+                    <input type="text" runat="server" id="enterpriseUserInfo" title="logged in user" disabled="disabled"/>
+
+                    <!-- new rdp host -->
+                    <input type="button" runat="server" id="newRDPHost" value="New RDP Host" onclick="openPopup('editHostPopup', 'EditHost.aspx?hostType=RDP');" title="New RDP Host (standard or over VM bus)"/>
+
+                    <!-- new ssh host -->
+                    <input type="button" runat="server" id="newSSHHost" value="New SSH Host" onclick="openPopup('editHostPopup', 'EditHost.aspx?hostType=SSH');" title="New SSH Host"/>
                 
                     <!-- logout -->
                     <input type="button" runat="server" id="logout" value="Logout" onserverclick="LogoutButtonClick" title="Logout"/>
@@ -167,10 +218,10 @@
                     <ItemTemplate>
                         <div class="hostDiv">
                             <a runat="server" id="hostLink" title="connect">
-                                <img src="img/RemoteDesktop.png" alt="host" width="128px" height="128px"/>
+                                <img src="<%# Eval("HostImage").ToString() %>" alt="host" width="128px" height="128px"/>
                             </a>
                             <br/>
-                            <span runat="server" id="hostName" title="edit"></span>
+                            <span runat="server" id="hostName"></span>
                         </div>
                     </ItemTemplate>
                 </asp:Repeater>
@@ -181,10 +232,18 @@
             <!-- *** TOOLBAR                                                                                                                                                                    *** -->
             <!-- ********************************************************************************************************************************************************************************** -->
             
+            <div runat="server" id="toolbarToggle" style="visibility:hidden;display:none;">
+                <!-- icon from: https://icons8.com/ -->
+			    <img src="img/icons8-menu-horizontal-21.png" alt="show/hide toolbar" width="21px" height="21px" onclick="toggleToolbar();"/>
+            </div>
+
             <div runat="server" id="toolbar" style="visibility:hidden;display:none;">
 
                 <!-- server info -->
                 <input type="text" runat="server" id="serverInfo" title="connected server" disabled="disabled"/>
+
+                <!-- user info -->
+                <input type="text" runat="server" id="userInfo" title="connected user" disabled="disabled"/>
 
                 <!-- stat bar -->
                 <input type="button" runat="server" id="stat" value="Show Stat" onclick="toggleStatMode();" title="display network and rendering info" disabled="disabled"/>
@@ -204,7 +263,7 @@
                 <!-- remote clipboard. display the remote clipboard content and allow to copy it locally (text only) -->
                 <input type="button" runat="server" id="clipboard" value="Clipboard" onclick="requestRemoteClipboard();" title="retrieve the remote clipboard content (text only)" disabled="disabled"/>
 
-                <!-- upload/download file(s). only enabled if the connected server is localhost or if a domain is specified (so file(s) can be accessed within the rdp session) -->
+                <!-- upload/download file(s). only enabled if the connected server is localhost or if a domain is specified (so file(s) can be accessed within the remote session) -->
                 <input type="button" runat="server" id="files" value="Files" onclick="openPopup('fileStoragePopup', 'FileStorage.aspx');" title="upload/download files to/from the user documents folder" disabled="disabled"/>
 
                 <!-- send ctrl+alt+del. may be useful to change the user password, for example -->
@@ -212,6 +271,12 @@
 
                 <!-- send a right-click on the next touch or left-click action. may be useful on touchpads or iOS devices -->
                 <input type="button" runat="server" id="mrc" value="Right-Click OFF" onclick="toggleRightClick(this);" title="if toggled on, send a Right-Click on the next touch or left-click action" disabled="disabled"/>
+
+                <!-- swipe up/down gesture management for touchscreen devices. emulate vertical scroll in applications -->
+                <input type="button" runat="server" id="vswipe" value="Swipe up/down ON" onclick="toggleVerticalSwipe(this);" title="if toggled on, allow vertical scroll on swipe (experimental feature, disabled on IE/Edge)" disabled="disabled"/>
+
+                <!-- share session -->
+                <input type="button" runat="server" id="share" value="Share" onclick="openPopup('shareSessionPopup', 'ShareSession.aspx');" title="share session" disabled="disabled"/>
 
                 <!-- disconnect -->
                 <input type="button" runat="server" id="disconnect" value="Disconnect" onserverclick="DisconnectButtonClick" title="disconnect session" disabled="disabled"/>
@@ -222,6 +287,7 @@
             <div id="displayDiv"></div>
 
             <!-- remote session helpers -->
+            <div id="cacheDiv"></div>
             <div id="statDiv"></div>
 		    <div id="debugDiv"></div>
             <div id="msgDiv"></div>
@@ -232,15 +298,12 @@
 
         <script type="text/javascript" language="javascript" defer="defer">
 
-            // handle connection failure, disconnect and logout
-            handleRemoteSessionExit(<%=RemoteSession != null && RemoteSession.State == RemoteSessionState.Disconnected && RemoteSession.ExitCode != 0 ? RemoteSession.ExitCode : 0%>);
+            initDisplay();
 
             // auto-connect / start program from url
             // if the display resolution isn't set, the remote session isn't able to start; redirect with the client resolution
             if (window.location.href.indexOf('&connect=') != -1 && (window.location.href.indexOf('&width=') == -1 || window.location.href.indexOf('&height=') == -1))
             {
-                showToolbar();
-
                 var width = document.getElementById('<%=width.ClientID%>').value;
                 var height = document.getElementById('<%=height.ClientID%>').value;
 
@@ -261,55 +324,51 @@
                 window.location.href = redirectUrl;
             }
 
-            function showToolbar()
+            function initDisplay()
             {
-                // server info
-                var server = document.getElementById('<%=server.ClientID%>');
-                if (server != null)
+                try
                 {
-                    var serverInfo = document.getElementById('<%=serverInfo.ClientID%>');
-                    if (serverInfo != null)
-                    {
-                        serverInfo.value = server.value == '' ? 'localhost' : server.value;
-                    }
+                    var display = new Display();
+
+                    // detect the browser width & height
+                    setClientResolution(display);
+
+                    // swipe is disabled on IE/Edge because it emulates mouse events by default (experimental)
+                    document.getElementById('<%=vswipe.ClientID%>').disabled = display.isIEBrowser();
+                }
+                catch (exc)
+                {
+                    alert('myrtille initDisplay error: ' + exc.message);
+                }
+            }
+
+            function onHostTypeChange(hostType)
+            {
+                var securityProtocolDiv = document.getElementById('securityProtocolDiv');
+                if (securityProtocolDiv != null)
+                {
+                    securityProtocolDiv.style.visibility = (hostType.selectedIndex == 0 ? 'visible' : 'hidden');
+                    securityProtocolDiv.style.display = (hostType.selectedIndex == 0 ? 'block' : 'none');
                 }
 
-                // show toolbar
-                var toolbar = document.getElementById('<%=toolbar.ClientID%>');
-                if (toolbar != null)
+                var vmDiv = document.getElementById('vmDiv');
+                if (vmDiv != null)
                 {
-                    toolbar.style.visibility = 'visible';
-                    toolbar.style.display = 'block';
+                    vmDiv.style.visibility = (hostType.selectedIndex == 1 ? 'visible' : 'hidden');
+                    vmDiv.style.display = (hostType.selectedIndex == 1 ? 'block' : 'none');
                 }
 
-                /*
-                CAUTION! on mobile devices, there isn't any reliable/standard way to detect the zoom level
-                problem is, the browser size (used as remote session size) detection is impacted by the zoom level, if any
-                disabling the zoom is also not possible on some devices (and not a good idea anyway, for the user experience)
-                a workaround is to use the device pixel ratio, but it won't work on high DPI screens (disabled code below)
-                in any case, using the page default zoom does work
-                */
+                var domainDiv = document.getElementById('domainDiv');
+                if (domainDiv != null)
+                {
+                    domainDiv.style.visibility = (hostType.selectedIndex == 0 ? 'visible' : 'hidden');
+                    domainDiv.style.display = (hostType.selectedIndex == 0 ? 'block' : 'none');
+                }
+            }
 
-                //var browserZoomLevel = 100;
-
-                //try
-                //{
-                //    browserZoomLevel = Math.round(window.devicePixelRatio * 100);
-                //    alert('browser zoom level: ' + browserZoomLevel);
-                //}
-                //catch (exc)
-                //{
-                //    // not supported by the browser
-                //}
-
+            function setClientResolution(display)
+            {
                 // browser size. default 1024x768
-                var display = new Display();
-
-                //alert('toolbar horizontal offset: ' + display.getHorizontalOffset() + ', vertical: ' + display.getVerticalOffset());
-
-                //var width = ((display.getBrowserWidth() - display.getHorizontalOffset()) * browserZoomLevel / 100);
-                //var height = ((display.getBrowserHeight() - display.getVerticalOffset()) * browserZoomLevel / 100);
-
                 var width = display.getBrowserWidth() - display.getHorizontalOffset();
                 var height = display.getBrowserHeight() - display.getVerticalOffset();
 
@@ -339,7 +398,27 @@
                 disableControl('<%=files.ClientID%>');
                 disableControl('<%=cad.ClientID%>');
                 disableControl('<%=mrc.ClientID%>');
+                disableControl('<%=share.ClientID%>');
                 disableControl('<%=disconnect.ClientID%>');
+            }
+
+            function toggleToolbar()
+            {
+                var toolbar = document.getElementById('<%=toolbar.ClientID%>');
+
+                if (toolbar == null)
+                    return;
+
+	            if (toolbar.style.visibility == 'visible')
+                {
+                    toolbar.style.visibility = 'hidden';
+                    toolbar.style.display = 'none';
+                }
+                else
+                {
+                    toolbar.style.visibility = 'visible';
+                    toolbar.style.display = 'block';
+	            }
             }
 
 		</script>

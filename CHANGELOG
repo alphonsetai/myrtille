@@ -1,7 +1,75 @@
-﻿2018-04-08 Version 1.8.2 (beta)
-	enterprise mode now better reporting of login failures and includes change password dialog where user is required to change password
-	connectionString now in service app.config to allow to specify location for MyrtilleEnterprise.sdf or use SQL server
-	fixed issue with enterprise host create session including invalid /popup/ path in sessionURL
+﻿2018-11-03 Version 2.3.0 (stable)
+	HOTFIX! increased the WCF channels limits; this fixes an issue where some connections failed under the load
+	added WCF traces (disabled by default; see comments in configs)
+	replaced the remote session auto-incremented counter (as identifier) by a guid; this ensures an unique identifier even if Myrtille.Services (or MyrtilleAppPool before version 2.2.0) is restarted
+	the Myrtille.PDF virtual printer now opens the browser print dialog, removing the need to install a PDF viewer on the end user machine and providing direct access to local (or network) printers (not working with the built-in Firefox PDF.js, option to open/download the pdf instead)
+	added swipe up/down gesture management for touchscreen devices (useful to scroll the display in applications that need it; can be disabled into the toolbar) * experimental feature! * not working on IE/Edge (see below)
+	emulating mouse events for IE/Edge on touchscreen devices (touchscreen is disabled by default into IE/Edge and use pointer events instead of touch when enabled into about:flags)
+	for easier auto-connect / start program from url management, you can generate a password hash from url (thanks jol64). syntax: https://server/myrtille/GetHash.aspx?password=password
+	resynced FreeRDP (2.0.0 RC3)
+
+2018-10-21 Version 2.2.0 (stable)
+	disabled the myrtille application pool recycling
+	moved the remote session counter (auto-increment) to the service layer
+	myrtille pdf printer is now disabled by default in web.config
+	fixed SSH on non-default port (thanks pk910)
+
+2018-08-19 Version 2.1.2 (stable)
+	fixed an ipv6 connection issue (that may occurred when checking the link-local ipv6 address)
+
+2018-08-14 Version 2.1.1 (stable)
+	Resynced FreeRDP (2.0.0-dev4)
+	Hyper-V VM direct connection is now labelled "RDP over VM bus" into the login screen as a distinct host type
+	login form inputs are shown/hidden depending of the selected host type
+	added support of enhanced mode for Hyper-V VM direct connection (faster rendering and remote clipboard/printer are available) (thanks jol64)
+	added the name of the connected user into the toolbar (in addition to the connected server) when it's possible to retrieve it (standard rdp connection and non interactive logon)
+	updated documentation
+
+2018-08-06 Version 2.1.0 (stable)
+	support of Hyper-V VM direct connection (extension of the RDP protocol; doesn't require remote desktop access to be enabled on the guest VM) (thanks jol64)
+	updated documentation for usage and limitations of the Hyper-V connection
+	fixed a potential inversion of arrows and numbers keys (whatever the numlock status)
+	fixed a path issue for the myrtille PDF virtual printer (in debug build or if the printer service runs under a custom account)
+	fixed the files popup which always downloaded the first document, regardless of the selected one (regression from version 1.9.0)
+
+2018-07-31 Version 2.0.0 (stable)
+	Resynced FreeRDP (FQDN hotfix, introduced into myrtille 1.7.0, is still active... wfreerdp need some love :/)
+	the RDP security protocol (NLA, TLS, RDP, etc.) can now be selected from the login screen (RDP for compatibility and interactive logon, or in case of NLA issue; see https://github.com/cedrozor/myrtille/issues/116)
+	SSH terminal support (thanks Paul)
+	removed any RDP references on the gateway to make it fully protocol agnostic (support of any remote access protocol)
+	file transfer and print download can now be disabled from web config (along with remote clipboard and session sharing)
+	when sharing a remote session, guests now can't interact with it (they are just spectators)
+	included prompt for user credentials in enterprise mode
+	fixed login failure when passing domain in enterprise mode if IP is used instead of FQDN
+	fixed some css in enterprise mode (under Firefox)
+	websockets are now buffered for optimal performance on high latency / low bandwidth networks (thanks SieldP)
+	re-enabled stat button, which could help to diagnose connection issues (shows latency, bandwidth usage, etc.)
+	added a small icon on top of the screen to toggle the toolbar while connected (thanks windylea)
+	improved error messages in case of connection failure
+	some refactoring
+
+﻿2018-06-09 Version 1.9.1 (stable)
+	reinstated the hotfix removed into version 1.9.0, forcing IP connection when using FQDN; fact is, some people still have issues even with openssl 1.1.x (unable to reproduce, may depend on a specific configuration). more details here: https://github.com/FreeRDP/FreeRDP/issues/4525#issuecomment-380635647
+	improved performance mitigation in case of high latency network
+	the installer no longer requires administrator rights by default (but may still needs elevation during the installation, depending on the installed component(s))
+
+2018-05-24 Version 1.9.0 (stable)
+	resynced FreeRDP (version 2.0-RC2-dev3), now using the openssl 1.1.x architecture. Should fix any previously reported FQDN and NLA issues
+	added a pdf virtual printer; any document printed with the "Myrtille PDF" printer is downloaded to the browser and can be opened/saved/printed from there
+	pdf content is now downloaded into an hidden iframe, instead of a new tab, to prevent popup blockers to block it
+	added a client ip tracking option to prevent unauthorized accesses. configurable into web.config (thanks bigpjo)
+	cookieless sessions are now disabled by default. This lowers the risk of session stealing (by simply copying the url) but also removes the ability to have multiple connections/tabs. can still be enabled into web.config, but use at your own risk! (thanks bigpjo)
+	strengthened security to prevent session fixation attack or spoofing if cookieless sessions are enabled
+	the remote session can now be shared with a new toolbar button that generates a one time usage url. can be disabled into web.config. (thanks bigpjo)
+	a shared session now can't be disconnected by a guest. (thanks bigpjo)
+	security fixes with enterprise mode to ensure that shared sessions do not give access to owner hosts. (thanks bigpjo)
+	added an option to enterprise mode to allow hosts to be restricted to specific users (by username). (thanks bigpjo)
+	enterprise mode now have a better reporting of login failures and includes a change password dialog if the user is required to change it. (thanks bigpjo)
+	fixed issue with enterprise host create session including invalid /popup/ path in sessionURL. (thanks bigpjo)
+	the remote session is now disconnected after the browser window/tab is closed, or connection is lost, to prevent it from being left open server side. configurable into web.config (thanks bigpjo)
+	the database connection string (into bin/Myrtille.Services.exe.config) can now be configured to specify the SQLCE file location or use a standard SQL server (useful for a centralized database, with myrtille clustered). (thanks bigpjo)
+	added MFA and enterprise mode configuration steps into the installer
+	installer logs are now created into the install log folder (log/Myrtille.Setup.log)
 
 2018-04-02 Version 1.8.1 (beta)
 	enterprise mode data folder is now created by the installer (thanks hac)
